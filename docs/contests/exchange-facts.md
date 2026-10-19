@@ -159,6 +159,28 @@ Implemented in `contests/allja.json` (ADR-0012); `JARL_ALLJA.TXT` is packaged un
 `matches(s, '[LMHP]$')` because `Evaluator.matches` is a *search*, not a whole-string match
 (ADR-0012 §3).
 
+## JARL ACAG — `Acag.pas` (T13, the fourth per-contest ticket)
+
+| | |
+|---|---|
+| call history | `JARL_ACAG.TXT` (2 551 lines), comma via `StrictDelimiter` (`:65-66`), skips `!!Order!!` and `#` (`:75-76`) — the shipped file's first four lines are a `#` banner; columns `call,exch1[,usertext]` = `rec.Call/Number/UserText` (`:85-88`); **`tl.Count > 1` is the whole row rule** (`:80`), i.e. two cells; `call` and `exch1` must both be non-empty (`:89-90`); `usertext` stored only when `tl.Count >= 3` (`:88`); **no call validation at all**; no dedupe, no DXCC gate, `ParamStr(1)` file (`:72`) |
+| my exchange | `etRST` + `etJaCity`, default `5NN 1002H`, msg `'RST <City\|Gun\|Ku><Power>' (e.g. 5NN 1002H)` (`Ini.pas:187-194`); captions `'RST'` / `'Number'` (`ExchFields.pas:44,63`); RST `[1-5E][1-9N][1-9N]` L3 (`:44`), number `([0-9AOTN]*)([LMHP])` **L7** (`:63`), both anchored as `'^(' + R + ')$'` (`Contest.pas:310`) |
+| DX Exch1 | **always the literal `'599'`** (`:220-224`) — not `5NN` |
+| DX Exch2 | the history's second column, `<city\|gun\|ku><power>`, upper-cased at load (`:85-86,226-230`) — e.g. `1002H`, `01039M`, `100115M` |
+| format facts | `<city>` is 4 digits (0102–4715), `<gun>` 5 digits (01001–47005), `<ku>` 6 digits (010101–430105); `<power>` is one of `L/M/H/P` (`:181-188`) |
+| points | constant 1 (`:207`) |
+| multiplier | `Exch2` with a trailing `L`/`M`/`H`/`P` **stripped** (`Copy(S,1,Length(S)-1)`); if the last character is not one of those four, the whole string (`:191-207`) — character for character ALL JA's rule |
+| messages | **none** — `Acag.pas` has no `SendMsg` override, so the shared base wording applies |
+| capability flags | `TACAG.Create` (`:106-111`) sets neither `BFarnsworthEnabled` nor a DXCC requirement |
+| verdict labels | RST mismatch `leRST` (`Log.pas:859`); number mismatch `leNR` (`Log.pas:943`, `etJaCity`) — the line right after ALL JA's `etJaPref`, **not** `leST`/`leQTH` |
+| data, measured | 2 547 data rows; **0 lost to the shared call grammar**; number lengths 5 chars 1 616 / 6 chars 227 / 7 chars 704 (max 7 = the box's `L: 7`, fitted by every row); power letters M 1 613 / H 780 / L 154 / **P 0**; 807 distinct multipliers, all digits, **including leading zeros** (`7K1AEU/8,01039M` → `01039`) |
+
+Implemented in `contests/acag.json` (ADR-0013); `JARL_ACAG.TXT` is packaged unmodified
+(38 526 bytes, sha256 `75d0e1ea…`). The multiplier expression is ALL JA's verbatim, and that is
+deliberate: the two Pascal functions are the same code, so one document's semantics pins both
+(ADR-0013 §3). The one difference that matters is data: a code like `01039` must stay a
+**string**, or the leading zero would fold two multipliers into one.
+
 ### Data inventory for the remaining per-contest tickets (verified 2026-10-20)
 
 | Asset | Used by | State |
@@ -168,7 +190,7 @@ Implemented in `contests/allja.json` (ADR-0012); `JARL_ALLJA.TXT` is packaged un
 | `K1USNSST.txt` | K1USN SST | packaged (T11) — `call,name,qth`; multiplier is the QTH, or the DXCC entity when the QTH is `DX` (`CWSST.pas:326-330`) |
 | `ARRLDXCW_USDX.txt` | ARRL DX (`ArrlDx.pas`) | **not packaged** — needs the my-exchange branch (§1 of ADR-0010) |
 | `JARL_ALLJA.TXT` (2 542 lines, `call,exch1[,usertext]`, `#` banner) | JARL ALL JA (`AllJa.pas:72-100`) | packaged (T12) — RST `599` + `<pref><power>`; no serial; 1 point; multiplier = `Exch2` minus a trailing `L/M/H/P` (`:190-207`) |
-| `JARL_ACAG.TXT` (2 551 lines, `call,exch1[,usertext]`) | JARL ACAG (`Acag.pas:72-100`) | **not packaged** — RST + `<city\|gun\|ku><power>`; no serial |
+| `JARL_ACAG.TXT` (2 551 lines, `call,exch1[,usertext]`, `#` banner) | JARL ACAG (`Acag.pas:72-100`) | packaged (T13) — RST `599` + `<city\|gun\|ku><power>`; no serial; 1 point; multiplier = `Exch2` minus a trailing `L/M/H/P` (`:191-207`), a **string** so leading zeros survive |
 | `CWOPS.LIST` (6 344 lines, header-driven `!!Order!!,Call,Name,Exch1,UserText`) | CWops CWT (`CwOps.pas:74`) | **not packaged** — name + CWT number/state/country from the file; no serial |
 | `FDGOTA.txt` (17 330 lines, `!!Order!!,Call,Exch1,Sect,UserText`) | ARRL Field Day (`ArrlFd.pas:224`) | **not packaged** — class + section from the file; the two-pass club-name logic (`:227-260`) is engine code |
 | `HstResults.txt` | `Main.pas` (HST results import) | empty file; HST also needs the serial fix (F8) |

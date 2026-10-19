@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "id": "acag",
+  "name": "JARL ACAG",
+  "duration": { "default": 30, "min": 1, "max": 60 },
+  "runModes": ["single-call", "pile-up"],
+  "constants": {},
+  "exchange": {
+    "myFields": [
+      { "key": "rst", "type": "rst", "label": "RST" },
+      { "key": "city", "type": "text", "label": "Number" }
+    ],
+    "their": {
+      "dice": [],
+      "bindings": {
+        "hisNumber": { "source": "history", "column": "number" }
+      },
+      "exch1": "'599'",
+      "exch2": "upper(hisNumber)"
+    }
+  },
+  "validation": [
+    { "field": "rst", "when": "not matches(upper(rst), '^[1-5E][1-9N][1-9N]$')", "error": "RST must be three characters" },
+    { "field": "city", "when": "not matches(upper(city), '^([0-9AOTN]*)([LMHP])$') or len(city) > 7", "error": "Number must be a city, gun or ku code and a power letter, up to 7" }
+  ],
+  "scoring": {
+    "points": "1",
+    "multipliers": [
+      { "key": "ifElse(matches(theirExch2, '[LMHP]$'), substr(theirExch2, 1, len(theirExch2) - 1), theirExch2)" }
+    ]
+  },
+  "callHistory": {
+    "asset": "JARL_ACAG.TXT",
+    "delimiter": ",",
+    "skipPrefixes": ["!!Order!!", "#"],
+    "minFields": 2,
+    "columns": [
+      { "name": "call", "index": 0, "type": "callsign", "required": true },
+      { "name": "number", "index": 1, "type": "text", "required": true },
+      { "name": "userText", "index": 2, "type": "text" }
+    ],
+    "dedupe": false,
+    "requiresMyCallInDxcc": false
+  },
+  "station": {
+    "callPool": "MASTER.DTA",
+    "speedRange": { "min": "speed - 5", "max": "speed + 10" },
+    "exchangeDefaults": { "rst": "5NN", "city": "1002H" }
+  },
+  "messages": {},
+  "capabilities": { "farnsworth": false, "requiresMyDxcc": false }
+}

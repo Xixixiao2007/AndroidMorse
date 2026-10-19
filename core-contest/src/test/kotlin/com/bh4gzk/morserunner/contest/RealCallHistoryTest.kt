@@ -152,6 +152,24 @@ class RealCallHistoryTest {
         assertTrue(history.calls.none { it.startsWith("#") || it.startsWith("!!") })
     }
 
+    @Test
+    fun `the real JARL ACAG history keeps every row, because the file's rule is the grammar`() {
+        val history = parse("acag")
+
+        // 2 551 lines: a four-line '#' banner and 2 547 data rows, every one with exactly two
+        // cells. Acag.pas:74-96 keeps a row when `tl.Count > 1` and both cells are non-empty,
+        // and does **no** call validation — but every one of the 2 547 calls also passes the
+        // shared grammar, so upstream's rule and the port's agree exactly (ADR-0013 §2).
+        assertEquals(2_547, history.size, "unexpected JARL ACAG history size ${history.size}")
+        assertTrue(history.calls.all { history.recordFor(it)?.get("number").orEmpty().isNotEmpty() })
+        // A 4-digit city code, a 5-digit gun code and a 6-digit ku code, all from the file.
+        assertEquals("1430H", history.recordFor("7K1CPT")?.get("number"))
+        assertEquals("01039M", history.recordFor("7K1AEU/8")?.get("number"), "a leading zero is kept")
+        assertEquals("100115M", history.recordFor("7K1BIB")?.get("number"))
+        // A portable call with a call-area suffix stays, as upstream keeps it.
+        assertTrue(history.calls.none { it.startsWith("#") || it.startsWith("!!") })
+    }
+
     private val knowsW1Aw = object : CallFacts {
         override fun prefix(call: String): String? = null
         override fun zone(call: String): Double? = null

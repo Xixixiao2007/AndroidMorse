@@ -200,6 +200,55 @@ class PackagedAssetsTest {
     }
 
     @Test
+    fun `the packaged JARL ACAG history drives a real roster`() {
+        // T13: the fourth per-contest ticket. The file is upstream's `JARL_ACAG.TXT`, copied
+        // unmodified (MPL-2.0, spec §9), and this is the whole chain the device uses:
+        // packaged bytes → the config's own callHistory spec → the roster's exchange.
+        val bundled = ContestLibrary.bundled()
+        assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
+        val config = bundled.configs.firstOrNull { it.id == "acag" }
+        assertNotNull(config, "no bundled acag config")
+
+        val file = File(assetsDir, config.callHistory.asset)
+        assertEquals(38_526, file.length().toInt(), "the packaged history is not upstream's JARL_ACAG.TXT")
+        val history = assertIs<HistoryLoad.Loaded>(
+            CallHistoryFile.parse(file.readText(), config.callHistory, "W1AW", data.callFacts),
+        ).history
+        // 2 551 lines: a '#' banner and 2 547 two-cell data rows. The file's rule (two non-empty
+        // cells, no call grammar) and the port's agree exactly (ADR-0013 §2).
+        assertEquals(2_547, history.size, "unexpected JARL ACAG history size ${history.size}")
+        assertEquals("1430H", history.recordFor("7K1CPT")?.get("number"))
+        assertEquals("01039M", history.recordFor("7K1AEU/8")?.get("number"))
+        assertEquals("100115M", history.recordFor("7K1BIB")?.get("number"))
+
+        // Every cell the shipped file carries is a legal entry for the operator's own second box
+        // (ExchFields.pas:63 `([0-9AOTN]*)([LMHP])`, ≤7), so the copy an operator can type always
+        // matches what the station sent. Measured, not assumed.
+        val numbers = history.calls.map { history.recordFor(it)?.get("number").orEmpty() }
+        assertEquals(7, numbers.maxOf { it.length }, "a code is longer than the box allows")
+        assertTrue(
+            numbers.all { it.last() in "LMHP" },
+            "a code without a trailing power letter: ${numbers.filter { it.last() !in "LMHP" }.take(5)}",
+        )
+
+        val roster = StationRoster(
+            config = config,
+            pool = history,
+            history = history,
+            settings = RosterSettings(speedWpm = 15),
+            seed = 20_261_020L,
+            calls = data.callFacts,
+        )
+        repeat(StationRoster.MAX_STATIONS) { roster.add() }
+        assertEquals(StationRoster.MAX_STATIONS, roster.size)
+        roster.stations.forEach { station ->
+            val record = assertNotNull(history.recordFor(station.call), station.call)
+            assertEquals("599", station.exchange.exch1, "Acag.pas:222 the RST is always 599")
+            assertEquals(record["number"].orEmpty().uppercase(), station.exchange.exch2, station.call)
+        }
+    }
+
+    @Test
     fun `the packaged DXCC list resolves the entities the contests score on`() {
         assertEquals(335, data.dxcc.size, "the DXCC table is not the shipped one")
         assertEquals("Fed. Rep. of Germany", data.callFacts.country("DL2XYZ"))

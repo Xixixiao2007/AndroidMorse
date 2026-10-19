@@ -330,8 +330,10 @@ class ContestRules(
             // it `leQTH` for that contest (`Log.pas:917-920`), not `leERR`.
             field.key == "qth" -> QsoError.Qth
             // JARL ALL JA's second field is `etJaPref`, which upstream labels `leNR`
-            // (`Log.pas:942`); `etJaCity` (ACAG) is the only other type that does.
+            // (`Log.pas:942`); JARL ACAG's is `etJaCity`, the line after it, with the same
+            // label (`Log.pas:943`). Both are naming, not a new rule.
             field.key == "pref" -> QsoError.Number
+            field.key == "city" -> QsoError.Number
             "itu" in field.key || "soc" in field.key -> QsoError.Qth
             else -> QsoError.Err
         }
