@@ -132,4 +132,18 @@ class QsoLogTest {
         // A cleared log accepts the same call again.
         assertTrue(log.record(qso("W1AW")) is LogOutcome.Accepted)
     }
+
+    @Test
+    fun `the accepted outcome carries the normalised callsign`() {
+        // Regression: the outcome used to hand back the caller's own record, so a
+        // caller echoing outcome.record.call showed "  w1aw " while the log held
+        // "W1AW". One normalised record must be both stored and returned.
+        val log = QsoLog()
+
+        val outcome = log.record(qso("  w1aw "))
+
+        assertTrue(outcome is LogOutcome.Accepted)
+        assertEquals("W1AW", (outcome as LogOutcome.Accepted).record.call)
+        assertEquals(outcome.record, log.qsos.single())
+    }
 }

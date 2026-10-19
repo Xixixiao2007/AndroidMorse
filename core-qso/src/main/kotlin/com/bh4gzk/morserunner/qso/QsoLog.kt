@@ -98,14 +98,18 @@ class QsoLog {
         if (call.isEmpty()) return LogOutcome.Nil
         if (!calls.add(call)) return LogOutcome.Duplicate
 
-        records.add(record.copy(call = call))
-        rawPoints += record.points
-        rawMultiplierKeys += record.multipliers
-        if (record.verified) {
-            verifiedPoints += record.points
-            verifiedMultiplierKeys += record.multipliers
+        // One normalised record is stored AND returned: handing back the caller's
+        // original object would leak the untrimmed callsign back through the
+        // outcome, so a caller echoing it would show " w1aw " instead of "W1AW".
+        val accepted = record.copy(call = call)
+        records.add(accepted)
+        rawPoints += accepted.points
+        rawMultiplierKeys += accepted.multipliers
+        if (accepted.verified) {
+            verifiedPoints += accepted.points
+            verifiedMultiplierKeys += accepted.multipliers
         }
-        return LogOutcome.Accepted(record, rawPoints, rawMultiplierCount, rawScore)
+        return LogOutcome.Accepted(accepted, rawPoints, rawMultiplierCount, rawScore)
     }
 
     /**
