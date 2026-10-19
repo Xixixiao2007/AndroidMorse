@@ -115,13 +115,19 @@ revise the schema now — not after 12 configs exist.
   sends the state-dependent message; the engine advances on received audio completion.
 - **Log + scoring**: every QSO validated on save: dup, wrong call, wrong RST, wrong
   exchange field, NIL. Score = points × multipliers, plus a 5-minute rate histogram.
-- **Timing**: PARIS standard, dit = 1200/WPM ms; Farnsworth spacing configurable.
+- **Timing**: the upstream keyer, **not** textbook PARIS — one unit is `60/48/WPM` s =
+  `1250/WPM` ms (`VCL/MorseKey.pas:249`; the word is 48 units with a 5U inter-word space).
+  Gaps are 3U inter-character, 5U inter-word, 4U inter-message. Farnsworth
+  (`VCL/FarnsKeyer.pas:292-293`) stretches the gaps only, for contests that allow it.
+  Already implemented and tested in `core-audio/MorseTiming.kt` (T1).
 
 ## 7. Audio
 
 - One `AudioTrack` (streaming, 48 kHz mono 16-bit, low-latency attributes), fed by a
   **lock-free block mixer** on a dedicated thread; no allocation on the audio path.
-- Each CW signal = sine at its pitch × raised-cosine envelope at key-on/key-off (≥ 5 ms).
+- Each CW signal = sine at its pitch × **Blackman-Harris** key-on/key-off ramp. Upstream
+  `RiseTime` is 5 ms (`VCL/MorseKey.pas:80`) and the ramp length is
+  `Round(2.7 × RiseTime × Rate)` samples (`:150-154`), i.e. ~13.5 ms of samples at any rate.
 - Effects: QRN (impulse + band noise), QRM (other CW signals off-frequency), QSB
   (Rayleigh-like slow amplitude modulation), flutter (fast periodic AM), LIDS behaviour.
 - Self-monitor of my own sending, with the same synthesizer.
@@ -154,7 +160,7 @@ Landscape: grid moves to a right-hand column, enlarging the signal panel.
 |---|---|---|
 | `MASTER.DTA` (1.2 MB) | upstream | call-sign pool; convert to an indexed binary asset at build time |
 | `DXCC.LIST` | upstream | prefix → country/zone; needs a converter + verification test |
-| contest call-history `*.txt` | upstream | per-contest, `asset` in the config |
+| contest call-history `*.txt` | upstream | per-contest, `asset` in the config; formats differ — `CQWWCW.TXT` is headerless positional, `IARU_HF.txt` is header-driven; see `docs/contests/exchange-facts.md` |
 | `arrlSections` | upstream `Util/ArrlSections.pas` | enum values for the expression built-ins |
 
 MPL-2.0 obligations: keep upstream copyright notices, publish modifications of MPL-covered
