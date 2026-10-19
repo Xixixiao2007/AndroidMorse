@@ -55,6 +55,9 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
+    // HstSessionTest reads the expected weights straight from the module (T16).
+    testImplementation(project(":core-morse"))
+
     testImplementation(kotlin("test"))
 }
 

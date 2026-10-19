@@ -229,6 +229,33 @@ the document, which is why T15 made the schema key optional. It is also the firs
 **distribution** is the port's declared approximation (uniform over 1..176) where upstream's is a
 function of elapsed time; the *range* is upstream's.
 
+## HST (High Speed Test) — `CqWpx.pas` + `Log.pas` (T16, the seventh per-contest ticket)
+
+| | |
+|---|---|
+| contest class | **`TCqWpx`** — `Main.pas:505` maps `scWpx, scHst` to the same class, so the exchange, the serial and the roster path are CQ WPX's |
+| call history | **none**, for the same reason as CQ WPX: `TCqWpx.LoadCallHistory` (`CqWpx.pas:87-97`) loads `MASTER.DTA` as the pool only |
+| my exchange | `etRST` + `etSerialNr`, `ExchFieldEditable: False`, default `5NN #`, msg `'''RST <serial>'' (e.g. 5NN #)'` (`Ini.pas:138-145`); captions and patterns are the shared `ExchFields.pas:44,53` |
+| my serial | starts at **1** unconditionally — `Main.pas:1523-1524` `if SimContest = scHST then Tst.Me.NR := 1`, before the box's value is considered; `Inc` after every saved contact (`Log.pas:764-766`) |
+| my sent text | `Format('%d%.3d', [RST, NR])` then `599 → 5NN` (`Station.pas:384-394,427-433`): `5NN001`, one piece. The log *table* prints `%.4d` under `rmHst` (`Log.pas:800-812`); the sent text stays three digits |
+| DX Exch1 | the literal `'599'` (`CqWpx.pas:323-326`) |
+| DX Exch2 | `IntToStr(GetNR(station))`; for HST `GetNR` is `1 + Round(Random * Tst.Minute * Skills)` (`CqWpx.pas:314-320`, `DxOper.pas:216-220`) |
+| **points** | **`CallToScore(call)`** — the Morse sending time of the worked call, in element units (`Log.pas:586-597` over `MorseKey.pas:158-170`): each character is its dot/dash pattern plus one trailing space, the last character becomes `~` (free), `.` = 2, `-` = 4, space = 2, and the total starts at −1. Closed form for *n* known characters: `2·dots + 4·dashes + 2·(n−1) − 1`. `K1ABC` = 63, `W1AW` = 49, `JA1ABC` = 75, `DL/AA1ZZ` = 99 |
+| **score** | a **sum**, not a product: `UpdateStatsHst` (`Log.pas:600-620`) adds one `CallToScore` per contact to the raw total, and to the verified total only when `Qso.Err = '   '` (no errors) |
+| multiplier | none in upstream's sense — but `Log.pas:718-719` writes the score string into `Qso.Pfx`, which `ExtractMultiplier` (`CqWpx.pas:285-291`) returns, so the log's *score column* shows the weight. The port expresses the sum as `points = callWeight(theirCall)` plus one constant key (ADR-0016 §4) |
+| messages | **none** — `CqWpx.pas` has no `SendMsg` override |
+| capability flags | `TCqWpx.Create` (`:100-107`) sets neither `BFarnsworthEnabled` nor a DXCC requirement |
+| `rmHst` differences | speed steps in 5 WPM (`Main.pas:1101-1114`), RIT steps by 50 Hz (`:2306-2311`), requires `SerialNR = snStartContest` (`:1987-2000`), no `599 → ENN` corruption (`Station.pas:431`), `ShowCorrections` off (`Log.pas:527`) — all operating-flow/settings, none of them scoring |
+| `HstResults.txt` | an **output**: `PopupScoreHst` (`Main.pas:2210-2230`) appends `date, call, operator, score` to it, and the file in the upstream tree is 0 bytes. Not an input, not packaged |
+
+Implemented in `contests/hst.json` (ADR-0016). It is the series' second contest with no call
+history (after CQ WPX) and the **first whose score is a sum of per-contact weights** rather than
+`points × multiplier count`: HST's unit of work is the callsign's Morse time, so the document asks
+the language for `callWeight(theirCall)` and makes the multiplier a single constant key, which
+turns the port's product into upstream's sum contact for contact. The weight is computed from the
+**same alphabet the keyer sends** (`:core-morse`, shared with `:core-audio`), so the score cannot
+drift from the audio.
+
 ### Data inventory for the remaining per-contest tickets (verified 2026-10-20)
 
 | Asset | Used by | State |
@@ -242,7 +269,8 @@ function of elapsed time; the *range* is upstream's.
 | `CWOPS.LIST` (6 344 lines, header-driven `!!Order!!,Call,Name,Exch1,UserText`) | CWops CWT (`CwOps.pas:74`) | packaged (T14) — name + CWT number/state/country from the file; 1 point; multiplier = **the worked call**; no serial |
 | `FDGOTA.txt` (17 330 lines, `!!Order!!,Call,Exch1,Sect,UserText`) | ARRL Field Day (`ArrlFd.pas:224`) | **not packaged** — class + section from the file; the two-pass club-name logic (`:227-260`) is engine code |
 | — | CQ WPX | packaged (T15) — **no history at all**: `MASTER.DTA` is the pool and every exchange piece is generated; RST + a **running serial** (the first contest with one); 1 point; multiplier = the worked call's WPX prefix |
-| `HstResults.txt` | `Main.pas` (HST results import) | empty file; HST needs its own score table (F8 is fixed by T15) |
+| — | HST (High Speed Test) | packaged (T16) — **no history at all**: `MASTER.DTA` is the pool; RST + a running serial (reusing T15's); points = the worked call's **Morse weight**; the raw/verified totals are **sums**, expressed as one constant multiplier key |
+| `HstResults.txt` | HST results (`Main.pas:2210-2230` `PopupScoreHst`) | an **output**, not an asset: upstream appends a `date, call, operator, score` line to it and the shipped file is 0 bytes. Not packaged (T16 corrected this row, which used to read "results import") |
 
 > **T11 correction to the T3 inventory.** The rows above for ALL JA, ACAG, CWops CWT and Field
 > Day used to read "no history → `MASTER.DTA`" (and `FDGOTA.txt` "nothing — `grep` finds no

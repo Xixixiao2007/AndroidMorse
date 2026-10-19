@@ -179,7 +179,8 @@ offending JSON or expression:
 - Built-ins (v1): `upper/lower/len/substr`, `matches(str, regex)`, `num(str)`, `str(x)`,
   `callPrefix(call)`, `callZone(call)`, `callCountry(call)`, `callContinent(call)`,
   `arrlSectionOf(call)`, `indexOf(list, value)`, `listAt(list, index)`,
-  `unique(list)`, `count(list)`, `sum(list)`, `ifElse(cond, a, b)`.
+  `unique(list)`, `count(list)`, `sum(list)`, `ifElse(cond, a, b)`,
+  `callWeight(call)`.
 - **No** loops, assignment, I/O or reflection. Evaluation carries a step budget (default 10 000)
   and fails closed with a typed error.
 - **No randomness.** Dice are inputs: the config declares them (`their.dice`) and the runtime
@@ -187,7 +188,14 @@ offending JSON or expression:
 - Errors are user-visible in the contest editor: `line:col — message`. Compilation also
   answers `identifiers()`, so the loader checks every name against the §4 environment table.
 - A new built-in is an explicit extension point: spec edit + ADR-0003 conformance + tests.
-  Four were added by the T3 pressure test (`str`, `indexOf`, `listAt`, `callContinent`).
+  Four were added by the T3 pressure test (`str`, `indexOf`, `listAt`, `callContinent`), and
+  `callWeight` by T16 (ADR-0016 §2).
+- `callWeight(call)` is the **Morse sending time** of a callsign in keyer element units — the
+  integer `Log.pas:586-597` `CallToScore` produces, transcribed over the keyer's own alphabet
+  (`:core-morse`, shared with the audio module). It is a function of the characters, not a
+  `CallFacts` lookup: it needs no data asset and can never be "unknown". HST scores a contact by
+  it (`contests/hst.json`), which is why the language needed it at all: the score is a **sum of
+  per-contact weights**, and the language has no loop.
 
 ## 6. Runtime
 

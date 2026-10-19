@@ -12,5 +12,8 @@ dependencies {
     // (ADR-0005 §2). `api`: ContestRules exposes ContestConfig/FieldType in its signature.
     api(project(":core-contest"))
 
+    // HstRulesTest pins the engine's score against the module (ADR-0016 §3).
+    testImplementation(project(":core-morse"))
+
     testImplementation(kotlin("test-junit"))
 }

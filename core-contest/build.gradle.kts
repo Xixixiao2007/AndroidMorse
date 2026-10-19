@@ -17,5 +17,8 @@ dependencies {
     // `api`: the roster and CallFacts expose MasterDta/DxccList in their signatures.
     api(project(":core-data"))
 
+    // HstTest compares the document's score with the module's weight (ADR-0016 §3).
+    testImplementation(project(":core-morse"))
+
     testImplementation(kotlin("test-junit"))
 }

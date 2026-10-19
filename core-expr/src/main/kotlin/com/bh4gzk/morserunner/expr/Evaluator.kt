@@ -1,5 +1,6 @@
 package com.bh4gzk.morserunner.expr
 
+import com.bh4gzk.morserunner.morse.MorseWeight
 import java.util.regex.PatternSyntaxException
 
 /**
@@ -246,6 +247,15 @@ internal class Evaluator(
         "count" -> Value.Num(requireList(arguments[0], node.arguments[0].position).items.size.toDouble())
         "indexOf" -> indexOf(node, arguments)
         "listAt" -> listAt(node, arguments)
+        "callWeight" -> {
+            // `Log.pas:586-597` `CallToScore`: HST's per-contact score. The alphabet is the
+            // keyer's own (`:core-morse`), so scoring and sending cannot drift (ADR-0016 §2).
+            val call = requireString(arguments[0], node.arguments[0].position)
+            // Charge what is inspected, like the list built-ins do: a long string is not a
+            // free loop (ADR-0003's bound).
+            charge(call.length, node.position)
+            Value.Num(MorseWeight.of(call).toDouble())
+        }
         "sum" -> {
             val list = requireList(arguments[0], node.arguments[0].position)
             charge(list.items.size, node.position)

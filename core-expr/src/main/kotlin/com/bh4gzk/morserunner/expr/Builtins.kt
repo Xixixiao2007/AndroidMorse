@@ -86,6 +86,9 @@ internal object Builtins {
         Signature("count", 1, 1),
         Signature("sum", 1, 1),
         Signature("ifElse", 3, 3),
+        // Added by T16 (ADR-0016 §2): HST scores a contact by the Morse sending time of the
+        // worked call (`Log.pas:586-597`), which is a sum, not a multiplier product.
+        Signature("callWeight", 1, 1),
     ).associateBy { it.name }
 
     fun validate(name: String, argumentCount: Int, position: SourcePosition) {

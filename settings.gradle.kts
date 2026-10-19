@@ -24,6 +24,7 @@ rootProject.name = "morse-runner-android"
 
 include(":app")
 include(":core-expr")
+include(":core-morse")
 include(":core-data")
 include(":core-contest")
 include(":core-qso")

@@ -1,5 +1,7 @@
 package com.bh4gzk.morserunner.audio
 
+import com.bh4gzk.morserunner.morse.MorseAlphabet
+
 /** One piece of a keyed message: a tone, or silence. Durations are milliseconds. */
 sealed interface MorseElement {
     val ms: Double
@@ -32,7 +34,7 @@ object MorseEncoder {
         val sent = ArrayList<SentChar>(text.length)
         for ((wordIndex, word) in words.withIndex()) {
             for (ch in word) {
-                val pattern = MorseTable.patternOf(ch) ?: continue
+                val pattern = MorseAlphabet.patternOf(ch) ?: continue
                 sent += SentChar(pattern, wordIndex)
             }
         }

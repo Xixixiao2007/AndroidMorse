@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "hst",
+  "name": "HST (High Speed Test)",
+  "duration": { "default": 30, "min": 1, "max": 60 },
+  "runModes": ["single-call", "pile-up"],
+  "constants": {},
+  "exchange": {
+    "myFields": [
+      { "key": "rst", "type": "rst", "label": "RST" },
+      { "key": "nr", "type": "serial", "label": "Nr.", "range": [1, 176] }
+    ],
+    "sent": {
+      "exch1": "rst + ifElse(len(str(nr)) >= 3, str(nr), substr('000' + str(nr), len('000' + str(nr)) - 2, 3))",
+      "exch2": "''"
+    },
+    "their": {
+      "dice": [],
+      "bindings": {
+        "hisNr": { "source": "serial" }
+      },
+      "exch1": "'599'",
+      "exch2": "str(hisNr)"
+    }
+  },
+  "validation": [
+    { "field": "rst", "when": "not matches(upper(rst), '^[1-5E][1-9N][1-9N]$')", "error": "RST must be three characters" },
+    { "field": "nr", "when": "not (nr >= 1 and nr <= 9999)", "error": "Serial must be 1-9999" }
+  ],
+  "scoring": {
+    "points": "callWeight(theirCall)",
+    "multipliers": [
+      { "key": "'HST'" }
+    ]
+  },
+  "station": {
+    "callPool": "MASTER.DTA",
+    "speedRange": { "min": "speed - 5", "max": "speed + 10" },
+    "exchangeDefaults": { "rst": "5NN", "nr": "1" }
+  },
+  "messages": {},
+  "capabilities": { "farnsworth": false, "requiresMyDxcc": false }
+}
