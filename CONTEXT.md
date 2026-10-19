@@ -65,6 +65,51 @@ The port must not use textbook PARIS numbers; Morse Runner's keyer differs delib
 Spec: [`docs/spec/mr-android-spec.md`](docs/spec/mr-android-spec.md) — status: **approved** (Q5).
 
 ## Glossary
-_Fills lazily as terms resolve. See spec §2 for the current set (Contest, Exchange, Message,
-QSO state, DX station, Run mode, LID, Mult, NIL)._
+
+Definitions verified against the upstream source; where a term has two senses in MR, both are
+listed, because confusing them is how logging bugs start.
+
+- **Contest** — the rule set one session runs under: exchange fields, validation, points,
+  multipliers, call-history source, message wording, capability flags. Upstream subclasses
+  `TContest` once per contest (`CqWW.pas`, `ArrlSS.pas`, `IaruHf.pas`, …); here it is a JSON
+  document loaded at runtime (ADR-0002).
+- **Exchange** — the information that completes a contact. MR always has **two** pieces,
+  `Exch1` and `Exch2` (e.g. RST + zone). A contest may let the operator type them as one string
+  and split it (ARRL SS: `[nr] prec chk sect`), which is why the schema has an `entryParse` step.
+- **Message** — one canned transmission, upstream `TStationMessage` (`Station.pas:19-22`):
+  `msgCQ`, `msgNR`, `msgTU`, `msgMyCall`, `msgHisCall`, `msgB4`, `msgQm`, `msgNil`,
+  `msgGarbage`, `msgLongCQ`, `msgAgn`, … The eight touch buttons and the F1–F12 keys send these.
+- **QSO state** — the step of the contact the operator is in (idle, calling CQ, waiting for a
+  call, sending exchange, waiting for exchange, logged). Not to be confused with **station
+  state** (`Station.pas:26-36`: `stListening`, `stCopying`, `stPreparingToSend`, `stSending`),
+  which describes the *audio* pipeline of one station.
+- **DX station** — a simulated station being worked (upstream `TDxStation`): callsign, exchange,
+  speed, pitch, level, fade, behaviour profile. **My station** (`TMyStation`) is the operator's
+  own side, which is also synthesised so it can be monitored.
+- **Run mode** — how the simulation behaves, not which contest: single call, pile-up, or
+  competition (WPX / HST), per spec §6.
+- **LID** — a deliberately badly-behaved simulated operator. Upstream's definition is about
+  callsign handling: a LID *rejects a correct call* and *accepts a wrong one without correcting
+  a partial call* (`DxOper.pas:514-521`). It is a behaviour profile, not an error in our code.
+- **Multiplier** — a distinct value (zone, country, section, prefix) that multiplies total
+  points. One contact may contribute several: upstream stores a `;`-separated `MultStr` and
+  splits it into a deduplicated list (`Log.pas:250-253`).
+- **NIL** — two senses: (a) as a *message*, "no station here / not heard" (`msgNil`); (b) as a
+  *log verdict*, a contact that is not valid (`leNIL`, `Log.pas:48`) — what `QsoLog` returns when
+  the callsign is empty.
+- **RST** — signal report (readability, strength, tone), sent `599`/`5NN` in CW contests.
+- **CQ zone / ITU zone** — index numbers identifying location. A DXCC row may hold **several**
+  zones (`3,4,5` for the USA), so a single zone for scoring comes from the call-history file,
+  as upstream does (`CqWW.pas:280`).
+- **Serial number** — the running contact number some contests exchange (`#` in the config).
+- **Prefix** — the leading part of a callsign identifying the entity. Two extraction modes:
+  WPX (prefix + district digit, e.g. `DL2`) and DXCC (longest prefix, e.g. `DL2XYZ`); they are
+  not interchangeable — `RC2FX` is Kaliningrad as `RC2F` but European Russia as `RC2`.
+- **Call-history file** — per-contest text file mapping callsigns to exchange values (zone,
+  section, check). Formats differ: `CQWWCW.TXT` is headerless positional, `IARU_HF.txt` is
+  header-driven. See `docs/contests/exchange-facts.md`.
+- **Dice** — our term (ADR-0004) for the seeded random numbers a contest config declares as
+  inputs (`their.dice`). Evaluation stays deterministic and replayable; the language has no
+  `random()`.
+
 
