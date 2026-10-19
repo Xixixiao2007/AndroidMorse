@@ -38,5 +38,18 @@
 - Network: direct `https://github.com` blocked; proxy `127.0.0.1:7892` works
   (git already configured for it). `codeload.github.com` and `api.github.com` reachable directly.
 
-## Open decisions
-_None recorded yet — grilling in progress._
+## Decisions (human-confirmed, 2026-10-19)
+
+| # | Decision | ADR |
+|---|---|---|
+| Q1 | **Native Android app** — Kotlin + Jetpack Compose, real APK | [0001](docs/adr/0001-native-android-kotlin-compose.md) |
+| Q2 | **Full function-key mapping on touch** — 8 canned-message buttons in 2 rows × 4 columns, call entry with autocomplete; physical F1–F12 mapped too | — |
+| Q3 | **Contests are configuration documents**, imported at runtime; all 12 upstream contests preserved with no feature dropped | [0002](docs/adr/0002-contests-are-data.md) |
+| Q4 | **Bounded expression language** for contest behaviour (no loops/IO/reflection) | [0003](docs/adr/0003-bounded-expression-language.md) |
+
+Spec: [`docs/spec/mr-android-spec.md`](docs/spec/mr-android-spec.md) — status: draft for approval.
+
+## Glossary
+_Fills lazily as terms resolve. See spec §2 for the current set (Contest, Exchange, Message,
+QSO state, DX station, Run mode, LID, Mult, NIL)._
+

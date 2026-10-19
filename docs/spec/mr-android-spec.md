@@ -1,0 +1,194 @@
+# Spec — Morse Runner for Android
+
+Status: **draft for approval** (2026-10-19). Supersedes nothing.
+Reference implementation: `upstream/MorseRunnerCE` (MRCE 1.85.4, MPL-2.0).
+Decisions behind it: ADR-0001 (native), ADR-0002 (contests are data), ADR-0003 (expression engine).
+
+## 1. Goal
+
+A native Android app that reproduces **Morse Runner Community Edition 1.85.4** contest
+simulation: simulated CW pile-ups at your chosen speed/pitch, QSO state machine driven by
+canned messages, per-contest exchange validation, log + scoring, and the realism effects
+(QRM / QRN / QSB / flutter / lids).
+
+**Non-goals for v1:** SO2R, networking, integration with N1MM/DxLog, score submission,
+Windows/Linux parity of INI keys.
+
+## 2. Glossary (domain language — use these words in code)
+
+| Term | Meaning |
+|---|---|
+| **Contest** | A configuration document describing exchange fields, validation, scoring multipliers and station behaviour. |
+| **Exchange** | The information exchanged in a QSO: what I send and what the other station sends (e.g. `5NN 14`). |
+| **Message** | A canned transmission bound to a function key: CQ, EXCH, TU, MYCALL, HISCALL, B4, QRZ(?), NIL, WIPE, NR?. |
+| **QSO state** | The engine's current expectation: `CallingCQ`, `WaitingForCall`, `SendingExchange`, `WaitingForExchange`, `Logged`. |
+| **DX station** | A simulated station calling or answering: call sign, speed, pitch, strength, behaviour profile. |
+| **Run mode** | `SingleCall` (one station at a time), `PileUp` (many callers), `Competition` (timed scoring run). |
+| **LID** | A deliberately imperfect simulated operator (mistakes, wrong RST, sends when it should not). |
+| **Mult** | Multiplier for score (unique prefix, zone, section, society…). |
+| **NIL** | "Not in log" — the engine's judgement that the station was not actually worked. |
+
+## 3. Architecture
+
+Single Gradle project, modules split by *testability without Android*:
+
+```
+app/              Compose UI, Activity, audio output, asset loading, persistence
+core-contest/     schema model + loader + expression engine  (pure Kotlin/JVM)
+core-qso/         station roster, QSO state machine, log, scoring  (pure Kotlin/JVM)
+core-audio/       Morse timing table, sample synthesis, mixer  (pure Kotlin/JVM except AudioTrack sink)
+```
+
+`core-*` have **no Android dependencies** so they run as fast JVM unit tests; `app` wires them
+to Compose, `AudioTrack` and `SharedPreferences`.
+
+## 4. Contest configuration (schema v1 — draft)
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "id": "cqww",
+  "name": "CQ World Wide DX CW",
+  "duration": { "default": 30, "min": 1, "max": 60 },
+  "runModes": ["single-call", "pile-up", "competition"],
+  "exchange": {
+    "myFields": [
+      { "key": "rst",  "type": "rst", "send": "5NN" },
+      { "key": "zone", "type": "int", "range": [1, 40], "label": "CQ Zone" }
+    ],
+    "theirPattern": "{rst} {zone}"
+  },
+  "validation": [
+    { "field": "zone", "when": "not (zone >= 1 and zone <= 40)",
+      "error": "Invalid CQ zone" }
+  ],
+  "scoring": {
+    "points": "1",
+    "multipliers": ["callZone(theirCall)", "zone"]
+  },
+  "callHistory": { "asset": "callhistory/cqww.txt" },
+  "station": {
+    "callPool": "MASTER.DTA",
+    "speedRange": [speed - 5, speed + 10],
+    "exchangeDefaults": { "rst": "599" }
+  }
+}
+```
+
+An `ArrlSS` variant shows the pressure points the schema must survive:
+
+```jsonc
+"exchange": {
+  "myFields": [
+    { "key": "nr",     "type": "serial", "range": [1, 999] },
+    { "key": "prec",   "type": "enum", "values": ["A","B","Q","M","U"] },
+    { "key": "check",  "type": "int", "check": "twoDigits" },
+    { "key": "section","type": "enum", "values": "arrlSections" }
+  ]
+},
+"validation": [
+  { "when": "prec == 'M' and check > 65", "error": "Check must be ≤ 65 for multi-op" }
+]
+```
+
+**Open item (blocking ticket T3):** validate this schema against the *hardest* three contests
+(CQ WW, ARRL SS, IARU HF) before building the engine. If a contest cannot be expressed,
+revise the schema now — not after 12 configs exist.
+
+## 5. Expression language
+
+- Literals: numbers, strings, booleans, lists.
+- Operators: `+ - * / %`, `== != < <= > >=`, `and or not`, `?:`, `in`.
+- Identifiers resolve to exchange fields, station properties, or constants.
+- Built-ins (v1): `upper/lower/len/substr`, `matches(str, regex)`, `num(str)`,
+  `callPrefix(call)`, `callZone(call)`, `callCountry(call)`, `arrlSectionOf(call)`,
+  `unique(list)`, `count(list)`, `sum(list)`, `ifElse(cond, a, b)`.
+- **No** loops, assignment, I/O or reflection. Evaluation carries a step budget (default 10 000)
+  and fails closed with a typed error.
+- Errors are user-visible in the contest editor: `line:col — message`.
+
+## 6. Runtime
+
+- **Station roster**: 0–8 concurrent simulated stations; each has call, speed (WPM),
+  pitch (Hz), level, fade profile, and a behaviour profile (normal / LID).
+- **QSO state machine** (mirrors upstream `Main.pas`): message sends are queued; `Enter`
+  sends the state-dependent message; the engine advances on received audio completion.
+- **Log + scoring**: every QSO validated on save: dup, wrong call, wrong RST, wrong
+  exchange field, NIL. Score = points × multipliers, plus a 5-minute rate histogram.
+- **Timing**: PARIS standard, dit = 1200/WPM ms; Farnsworth spacing configurable.
+
+## 7. Audio
+
+- One `AudioTrack` (streaming, 48 kHz mono 16-bit, low-latency attributes), fed by a
+  **lock-free block mixer** on a dedicated thread; no allocation on the audio path.
+- Each CW signal = sine at its pitch × raised-cosine envelope at key-on/key-off (≥ 5 ms).
+- Effects: QRN (impulse + band noise), QRM (other CW signals off-frequency), QSB
+  (Rayleigh-like slow amplitude modulation), flutter (fast periodic AM), LIDS behaviour.
+- Self-monitor of my own sending, with the same synthesizer.
+- Verification: JVM tests assert dit/dah/gap sample counts and envelope continuity;
+  on-device check is "audible, click-free, correct rhythm" on WSA.
+
+## 8. UI (phone-first)
+
+Portrait, top→bottom:
+1. **Status bar** — contest name, elapsed/remaining, score, rate.
+2. **Signal panel** — the station being worked and its decoded exchange (large type).
+3. **Entry** — call field (soft keyboard, autocomplete from call history) + exchange fields,
+   `Enter` on the keyboard sends.
+4. **Message grid — 2 rows × 4 columns** (human-mandated):
+
+| | | | |
+|---|---|---|---|
+| **CQ** (F1) | **EXCH** (F2) | **TU** (F3) | **NR?** (F12) |
+| **?** (F7) | **B4** (F6) | **NIL** (F8) | **WIPE** (F11) |
+
+Long-press on **CQ** sends **MYCALL** (F4); long-press on **TU** sends **HISCALL** (F5).
+ESC/stop-sending is a small button next to the entry field.
+Physical keyboards: F1–F12, Enter, Space, Esc map 1:1 (works on WSA/tablet/Bluetooth).
+
+Landscape: grid moves to a right-hand column, enlarging the signal panel.
+
+## 9. Data assets
+
+| Asset | Source | Notes |
+|---|---|---|
+| `MASTER.DTA` (1.2 MB) | upstream | call-sign pool; convert to an indexed binary asset at build time |
+| `DXCC.LIST` | upstream | prefix → country/zone; needs a converter + verification test |
+| contest call-history `*.txt` | upstream | per-contest, `asset` in the config |
+| `arrlSections` | upstream `Util/ArrlSections.pas` | enum values for the expression built-ins |
+
+MPL-2.0 obligations: keep upstream copyright notices, publish modifications of MPL-covered
+files. Data files are redistributed unmodified.
+
+## 10. Testing
+
+- `core-*` unit tests on the JVM (red → green per ticket).
+- Behavioural parity tests transcribed from `upstream/MorseRunnerCE/Test/*.pas`
+  (callsign utils, DX oper, DXCC list, lexers, SS exchange parser).
+- Device smoke test per milestone: build → `adb install` → launch on WSA → screenshot.
+
+## 11. Tickets (tracer bullets, blockers first)
+
+| # | Ticket | Blocked by | Proves |
+|---|---|---|---|
+| T1 | Project skeleton, module split, WSA deploy script | — | APK builds and installs from the real source tree |
+| T2 | Expression engine + exhaustive unit tests | — | language specified in §5 works, fails closed |
+| T3 | Schema v1 + configs for CQ WW / ARRL SS / IARU + loader + load-time validation | T2 | **schema pressure test** — hardest contests expressible |
+| T4 | Audio engine: Morse timing, envelope, single-signal playback | T1 | correct, click-free CW on device |
+| T5 | Station roster + call/exchange generation from MASTER.DTA | T3, T4 | plausible pile-up audio |
+| T6 | QSO state machine + messages + log + scoring | T3, T5 | a complete QSO can be worked and scored |
+| T7 | Compose UI: 2×4 grid, entry + autocomplete, status/rate | T6 | playable on a phone |
+| T8 | Realism effects QRM/QRN/QSB/flutter/LIDS | T5 | authentic sound |
+| T9 | Settings + persistence (duration, speed, pitch, RIT, bandwidth) | T7 | configurable session |
+| T10–T20 | One ticket per remaining contest (11 configs + behaviour checks) | T3, T6 | all 12 contests preserved |
+
+**Milestone A (playable CQ WW): T1–T7.** Milestone B: T8, T9. Milestone C: T10–T20.
+
+## 12. Risks
+
+| Risk | Mitigation |
+|---|---|
+| Schema cannot express HST/ARRL SS/IARU | T3 pressure test *before* the engine (blocking) |
+| Audio latency/glitching on real phones | allocation-free mixer, 40–60 ms buffer, WSA + user's phone check |
+| Rewrite drift from upstream behaviour | parity tests from `Test/*.pas`; contest-by-contest verification |
+| 12 contests is a long haul | configs are data; each contest is an independent ticket |
