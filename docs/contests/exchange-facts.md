@@ -1,0 +1,101 @@
+# Exchange facts — the three hardest contests (T3 input)
+
+Source of truth: `upstream/MorseRunnerCE/` @ `2dd6f5c` (MRCE 1.85.4). Every claim below is read
+from the Pascal, with `file:line`. This is the **pressure test** material for the config schema
+(ADR-0002) and the expression language (ADR-0003): if the schema can absorb these three, the
+other nine are expected to fit.
+
+Extraction template for T10–T20 — answer all of these per contest:
+1. call-history file: name, delimiter, header row?, column order, skip rules, extra validation
+2. my exchange: how the operator enters it, how it is split into Exch1 / Exch2
+3. DX exchange: what Exch1 / Exch2 contain, and where each piece comes from
+4. realism quirks (deliberate corruption the operator must copy through)
+5. QSO points rule
+6. multiplier string
+7. message overrides (CQ wording, etc.)
+8. capability flags (Farnsworth, requires-my-DXCC, …)
+
+---
+
+## CQ WW — `CqWW.pas`
+
+| | |
+|---|---|
+| call history | `CQWWCW.TXT`, comma, **no header**; `call,cqzone,usertext` with `tl.Count > 2` (`:84`); skips `!!Order!!` and `#` lines (`:79-80`); rejects non-numeric zone (`:93`); optional user text (`:90`) |
+| my exchange | base class (not overridden) |
+| DX Exch1 | always `'599'` (`:285-288`) |
+| DX Exch2 | CQ zone from call history (`:291-298`), also stored as numeric `NR` (`:280`) |
+| realism | 5 % of the time a leading `0` is inserted for zones < 9 (`:296-297`) |
+| points | different continent → 3; same entity → 0; same continent `NA` → 2; else 1 (`:258-265`) |
+| multiplier | `ZN-<zone>` and, unless `/MM`, also `;<entity>` (`:233-255`); Alaska/Hawaii collapse to `United States of America` (`:251-253`) |
+| special | `/MM` suffix scores 0 points and yields **zone only** (`:236-240`) |
+
+Notes for the schema: needs DXCC lookups (continent, entity) for *both* stations, a suffix test on
+the call, and a two-part multiplier string. Points is a small ordered decision table, so a ternary
+chain suffices.
+
+## ARRL Sweepstakes — `ArrlSS.pas`
+
+| | |
+|---|---|
+| call history | `SSCW.TXT`, comma, needs `tl.Count > 3`; columns `call,section,?,check[,usertext]` (`:110-113`); skips `!!Order!!` (`:106`); `check` must parse as integer (`:112`); call must pass `TSSLexer.IsValidCall` (`:116`); list is sorted, lookups are binary searches (`:124`) |
+| my exchange (entered) | **one text field** parsed as a whole (`:179-180`):<br>`^ *(?P<exch1>(?P<nr>[0-9]+|#)? *(?P<prec>[QABUMS])) +(?P<chk>[0-9]{2}) +(?P<sect>[A-Z]{2,3}) *$` |
+| my exchange (split) | `Exch1 = "[nr] prec"`, `Exch2 = "chk sect"` (`:193-198`) |
+| DX Exch1 | `"<serial> <precedence>"` (`:437`) |
+| DX Exch2 | `"<check:02d> <section>"` (`:440`) |
+| precedence | weighted: A 43 %, B 19 %, U 28 %, Q/M/S 10 % (`:422-430`) |
+| realism | 10 % chance check becomes ±1 (mod 100) (`:489-495`); 10 % chance the section is replaced by a table neighbour (`:498-499`, `:507-517`) |
+| points | constant 2 (`:469`) |
+| multiplier | the ARRL/RAC section (`:470`) |
+| messages | `msgCQ` → `CQ SS <my>`; long CQ → `CQ CQ SS <my> <my> SS` (`:256-257`) |
+| callsign in exchange | the parser may extract a **corrected callsign** from the exchange field (`:296-313`), which suppresses re-sending |
+
+Notes: this is the case that motivated ADR-0003 — four semantic tokens in one input box, validated
+jointly, plus a callsign that can be corrected inside the exchange. `GetAlternateSection` needs
+“adjacent entry in a fixed table”, which is **not** expressible with the v1 built-in set (see gaps).
+
+## IARU HF — `IaruHf.pas`
+
+| | |
+|---|---|
+| call history | `IARU_HF.txt`, comma, **header-driven**: `!!Order!!,Call,Sect,UserText,` defines the column indices (`:115-126`); skips `#` lines (`:114`); dedupes by call (`:143-144`); also requires *my* callsign to resolve in DXCC before any record is added (`:147-151`) |
+| my exchange | RST + (ITU zone **or** IARU society) — chosen by the operator, explicitly *not* derived from my callsign (`:172-175`) |
+| DX Exch1 | always `'599'` (`:287-290`) |
+| DX Exch2 | society abbreviation **or** ITU zone string, straight from the history file (`:293-296`) |
+| points | same zone **or** non-numeric (HQ station) → 1; else same continent → 3; else → 5; no DXCC record → 1 (`:337-348`) |
+| multiplier | `Exch2` verbatim (`:351`) |
+| special | `OnSetMyCall` fails when my call is not a valid DXCC call (`:185-197`) |
+
+Notes: the same field carries a number *or* an abbreviation, so validation cannot assume numeric;
+scoring switches on “is this numeric”, which the expression language needs as a first-class test.
+
+---
+
+## What these three demand of the schema (T3 acceptance targets)
+
+1. **Two exchange fields**, each with caption, pattern, max length, and a semantic type — the
+   `ExchFields.pas:43-70` table is already exactly this shape.
+2. **Entry form ≠ sent form.** SS enters `[nr] prec chk sect` as one string and sends it as two.
+   The schema needs a `parse` step (whole-string regex with named groups) plus a mapping from
+   groups to Exch1/Exch2.
+3. **Call-history parse spec** per contest: filename, delimiter, whether the header defines columns,
+   skip prefixes, per-column validation, dedupe, and a required-DXCC gate for my own call.
+4. **Generation rules** per exchange piece: constant (`599`), history column, serial generator,
+   weighted choice, and deliberate perturbation (leading zero / ±1 / table neighbour).
+5. **Validation rules** for operator input: whole-string pattern + token-level checks + the ability
+   to extract a corrected callsign out of the exchange text.
+6. **Scoring** as an expression over (my entity/continent, his entity/continent, zone equality,
+   call suffix) with DXCC built-ins (`callZone`, `callCountry`, …).
+7. **Multiplier expression**, including composite keys (`ZN-3;Germany`).
+8. **Message overrides** per contest (CQ wording).
+9. **Capability flags**: Farnsworth (`Contest.pas:200`), requires-my-DXCC, `/MM` handling.
+
+### Gaps found against the v1 built-in set (spec §5) — to resolve in T3
+- `GetAlternateSection` (`ArrlSS.pas:507-517`) needs a **table-neighbour** lookup; v1 has no way to
+  index a fixed list, so the section table must either become a built-in or be expressed as a
+  static map in the config.
+- Weighted random choice (`ArrlSS.pas:422-430`) and the 5 % / 10 % perturbation rules need a
+  **deterministic RNG hook** — a random built-in would make evaluation non-deterministic, which
+  ADR-0003 forbids; the seeded value must be supplied by the runtime, not by the expression.
+- `IsNum` (`IaruHf.pas:355-366`) must exist as a numeric test in the language (or be expressible
+  as `matches(s, "^[0-9]+$")` — verify before adding a built-in).
