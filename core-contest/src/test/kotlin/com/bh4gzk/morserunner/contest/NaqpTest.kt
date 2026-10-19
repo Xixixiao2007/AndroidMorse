@@ -77,7 +77,10 @@ class NaqpTest {
         assertTrue("naqp" in ContestLibrary.manifestIds(), "the manifest does not list naqp")
         val bundled = ContestLibrary.bundled()
         assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
-        assertEquals(listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst"), bundled.configs.map { it.id })
+        assertEquals(
+            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja"),
+            bundled.configs.map { it.id },
+        )
         assertEquals(ContestConfig.SUPPORTED_SCHEMA_VERSION, naqp.schemaVersion)
         assertEquals("naqp", naqp.id)
         assertEquals("NCJ NAQP", naqp.name)

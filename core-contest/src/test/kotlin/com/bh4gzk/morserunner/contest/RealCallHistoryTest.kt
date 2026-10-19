@@ -133,6 +133,25 @@ class RealCallHistoryTest {
         assertTrue(history.calls.none { it.startsWith("#") || it.startsWith("!!") })
     }
 
+    @Test
+    fun `the real JARL ALL JA history keeps every row, because the file's rule is the grammar`() {
+        val history = parse("allja")
+
+        // 2 542 lines: a four-line '#' banner and 2 538 data rows, every one with exactly two
+        // cells. AllJa.pas:74-96 keeps a row when `tl.Count > 1` and both cells are non-empty,
+        // and does **no** call validation — but every one of the 2 538 calls also passes the
+        // shared grammar, so upstream's rule and the port's agree exactly (ADR-0012 §8).
+        assertEquals(2_538, history.size, "unexpected JARL ALL JA history size ${history.size}")
+        assertTrue(history.calls.all { history.recordFor(it)?.get("number").orEmpty().isNotEmpty() })
+        // A two-digit prefecture and a three-digit promotion-bureau code, both from the file.
+        assertEquals("14H", history.recordFor("7K1CPT")?.get("number"))
+        assertEquals("10H", history.recordFor("7K1III")?.get("number"))
+        assertEquals("110M", history.recordFor("JA8BMD")?.get("number"))
+        // A portable call with a call-area suffix stays, as upstream keeps it.
+        assertEquals("112M", history.recordFor("JA4GBD/8")?.get("number"))
+        assertTrue(history.calls.none { it.startsWith("#") || it.startsWith("!!") })
+    }
+
     private val knowsW1Aw = object : CallFacts {
         override fun prefix(call: String): String? = null
         override fun zone(call: String): Double? = null

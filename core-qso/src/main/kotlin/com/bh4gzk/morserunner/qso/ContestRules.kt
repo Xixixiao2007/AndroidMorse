@@ -329,6 +329,9 @@ class ContestRules(
             // K1USN SST's second field is `etGenericField`, and upstream labels a mismatch on
             // it `leQTH` for that contest (`Log.pas:917-920`), not `leERR`.
             field.key == "qth" -> QsoError.Qth
+            // JARL ALL JA's second field is `etJaPref`, which upstream labels `leNR`
+            // (`Log.pas:942`); `etJaCity` (ACAG) is the only other type that does.
+            field.key == "pref" -> QsoError.Number
             "itu" in field.key || "soc" in field.key -> QsoError.Qth
             else -> QsoError.Err
         }

@@ -74,7 +74,10 @@ class SstTest {
         assertTrue("k1usnsst" in ContestLibrary.manifestIds(), "the manifest does not list k1usnsst")
         val bundled = ContestLibrary.bundled()
         assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
-        assertEquals(listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst"), bundled.configs.map { it.id })
+        assertEquals(
+            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja"),
+            bundled.configs.map { it.id },
+        )
         assertEquals(ContestConfig.SUPPORTED_SCHEMA_VERSION, sst.schemaVersion)
         assertEquals("k1usnsst", sst.id)
         // Ini.pas:166-176, the contest's own name.

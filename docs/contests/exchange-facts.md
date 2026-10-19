@@ -137,6 +137,28 @@ Implemented in `contests/naqp.json` (ADR-0010); `NAQPCW.txt` is packaged unmodif
 
 Implemented in `contests/k1usnsst.json` (ADR-0011); `K1USNSST.txt` is packaged unmodified.
 
+## JARL ALL JA — `AllJa.pas` (T12, the third per-contest ticket)
+
+| | |
+|---|---|
+| call history | `JARL_ALLJA.TXT` (2 542 lines), comma via `StrictDelimiter` (`:65-66`), skips `!!Order!!` and `#` (`:75-76`) — the shipped file's first four lines are a `#` banner; columns `call,exch1[,usertext]` = `rec.Call/Number/UserText` (`:85-88`); **`tl.Count > 1` is the whole row rule** (`:80`), i.e. two cells; `call` and `exch1` must both be non-empty (`:89-90`); `usertext` stored only when `tl.Count >= 3` (`:88`); **no call validation at all**; no dedupe, no DXCC gate, `ParamStr(1)` file (`:72`) |
+| my exchange | `etRST` + `etJaPref`, default `5NN 10H`, msg `'RST <Pref><Power>' (e.g. 5NN 10H)` (`Ini.pas:178-185`); captions `'RST'` / `'Number'` (`ExchFields.pas:44,62`); RST `[1-5E][1-9N][1-9N]` L3 (`:44`), number `([0-9AOTN]*)([LMHP])` L4 (`:62`), both anchored as `'^(' + R + ')$'` (`Contest.pas:310`) |
+| DX Exch1 | **always the literal `'599'`** (`:220-223`) — not `5NN` |
+| DX Exch2 | the history's second column, `<pref><power>`, upper-cased at load (`:85-86,225-227`) — e.g. `14H`, `112M` |
+| format facts | `<pref>` is 2 digits (02–49) or 3 digits (101–114, Hokkaido promotion bureaus); `<power>` is one of `L/M/H/P` (`:181-189`) |
+| points | constant 1 (`:206`) |
+| multiplier | `Exch2` with a trailing `L`/`M`/`H`/`P` **stripped** (`Copy(S,1,Length(S)-1)`); if the last character is not one of those four, the whole string (`:190-207`) |
+| messages | **none** — `AllJa.pas` has no `SendMsg` override, so the shared base wording applies |
+| capability flags | `TALLJA.Create` (`:106-111`) sets neither `BFarnsworthEnabled` nor a DXCC requirement |
+| verdict labels | RST mismatch `leRST` (`Log.pas:859`); number mismatch `leNR` (`Log.pas:942`, `etJaPref`) — **not** `leST`/`leQTH` |
+| data, measured | 2 538 data rows; **0 lost to the shared call grammar** (unlike SST's 2); power letters M 1 528 / H 896 / L 114 / **P 0**; 2 441 numbers are 3 characters and 97 are 4 (max 4, so the box's `L: 4` fits every row); 59 distinct prefectures, 59 distinct multipliers, all digits |
+
+Implemented in `contests/allja.json` (ADR-0012); `JARL_ALLJA.TXT` is packaged unmodified
+(31 462 bytes, sha256 `d7952200…`). The multiplier is the port's first `substr` in a document:
+`substr(s, 1, len(s) - 1)` because the start is 1-based and the third argument is a length, and
+`matches(s, '[LMHP]$')` because `Evaluator.matches` is a *search*, not a whole-string match
+(ADR-0012 §3).
+
 ### Data inventory for the remaining per-contest tickets (verified 2026-10-20)
 
 | Asset | Used by | State |
@@ -145,7 +167,7 @@ Implemented in `contests/k1usnsst.json` (ADR-0011); `K1USNSST.txt` is packaged u
 | `NAQPCW.txt` | NCJ NAQP | packaged (T10) |
 | `K1USNSST.txt` | K1USN SST | packaged (T11) — `call,name,qth`; multiplier is the QTH, or the DXCC entity when the QTH is `DX` (`CWSST.pas:326-330`) |
 | `ARRLDXCW_USDX.txt` | ARRL DX (`ArrlDx.pas`) | **not packaged** — needs the my-exchange branch (§1 of ADR-0010) |
-| `JARL_ALLJA.TXT` (2 542 lines, `call,exch1[,usertext]`, `#` banner) | JARL ALL JA (`AllJa.pas:72-100`) | **not packaged** — RST `599` + `<pref><power>`; no serial; 1 point; multiplier = `Exch2` minus a trailing `L/M/H/P` (`:190-207`) |
+| `JARL_ALLJA.TXT` (2 542 lines, `call,exch1[,usertext]`, `#` banner) | JARL ALL JA (`AllJa.pas:72-100`) | packaged (T12) — RST `599` + `<pref><power>`; no serial; 1 point; multiplier = `Exch2` minus a trailing `L/M/H/P` (`:190-207`) |
 | `JARL_ACAG.TXT` (2 551 lines, `call,exch1[,usertext]`) | JARL ACAG (`Acag.pas:72-100`) | **not packaged** — RST + `<city\|gun\|ku><power>`; no serial |
 | `CWOPS.LIST` (6 344 lines, header-driven `!!Order!!,Call,Name,Exch1,UserText`) | CWops CWT (`CwOps.pas:74`) | **not packaged** — name + CWT number/state/country from the file; no serial |
 | `FDGOTA.txt` (17 330 lines, `!!Order!!,Call,Exch1,Sect,UserText`) | ARRL Field Day (`ArrlFd.pas:224`) | **not packaged** — class + section from the file; the two-pass club-name logic (`:227-260`) is engine code |
