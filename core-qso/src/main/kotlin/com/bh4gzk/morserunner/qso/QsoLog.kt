@@ -16,6 +16,13 @@ package com.bh4gzk.morserunner.qso
  *   upstream keeps raw and verified totals separately (`Log.pas:116-117`).
  * @param elapsedMs milliseconds since the session started, used for the
  *   5-minute rate histogram (spec §6).
+ * @param errors save-time verdict: which fields look mis-copied (`Log.pas:998-1090`).
+ *   An errored contact is still a logged contact, exactly as upstream's error
+ *   column implies (ADR-0005 §8).
+ * @param corrections what the station actually sent, for the log's correction
+ *   column (`Log.pas:1030`).
+ * @param scoreFailure why the contest scoring could not be evaluated, if it
+ *   could not; [points] is then zero (ADR-0005 §2).
  */
 data class QsoRecord(
     val call: String,
@@ -25,6 +32,9 @@ data class QsoRecord(
     val multipliers: Set<String>,
     val elapsedMs: Long,
     val verified: Boolean = true,
+    val errors: List<QsoError> = emptyList(),
+    val corrections: List<String> = emptyList(),
+    val scoreFailure: String? = null,
 )
 
 /** What happened when a contact was handed to the log. */
@@ -53,9 +63,9 @@ sealed interface LogOutcome {
  * log may contain contacts that were never confirmed. Both are exposed here;
  * the histogram is always over accepted contacts.
  *
- * Not included yet, and deliberately so: the field-level validations that need
- * the contest configuration (wrong RST, wrong exchange) — those arrive with T6
- * once T3's loader exists.
+ * Two ways in: [record] with a [QsoRecord] (the raw form, used when the caller
+ * already scored the contact) and [record] with a [QsoContact] (the validated
+ * form, which carries the save-time verdict and the contest's scoring).
  */
 class QsoLog {
 
@@ -94,14 +104,46 @@ class QsoLog {
      * band per session).
      */
     fun record(record: QsoRecord): LogOutcome {
-        val call = record.call.trim().uppercase()
+        val call = normalise(record.call)
         if (call.isEmpty()) return LogOutcome.Nil
         if (!calls.add(call)) return LogOutcome.Duplicate
-
         // One normalised record is stored AND returned: handing back the caller's
         // original object would leak the untrimmed callsign back through the
         // outcome, so a caller echoing it would show " w1aw " instead of "W1AW".
-        val accepted = record.copy(call = call)
+        return add(record.copy(call = call))
+    }
+
+    /**
+     * Adds the contact described by [contact], computing its verdict and score
+     * first.
+     *
+     * `NIL` and `DUP` are rejected outright (upstream flags them in the log, but a
+     * contact that was not worked or is already in the log must not add points);
+     * every other verdict is accepted *with* its errors, so the operator can see
+     * what went wrong (ADR-0005 §8).
+     */
+    fun record(contact: QsoContact): LogOutcome {
+        val call = normalise(contact.call)
+        // TrueCall = '' means the station was never worked (Log.pas:1015).
+        if (call.isEmpty() || !contact.worked) return LogOutcome.Nil
+        if (!calls.add(call)) return LogOutcome.Duplicate
+        return add(
+            QsoRecord(
+                call = call,
+                exch1 = contact.exch1.trim(),
+                exch2 = contact.exch2.trim(),
+                points = contact.score.points,
+                multipliers = contact.score.multipliers,
+                elapsedMs = contact.elapsedMs,
+                verified = contact.verified,
+                errors = contact.verdict.errors,
+                corrections = contact.verdict.corrections,
+                scoreFailure = contact.score.failure,
+            ),
+        )
+    }
+
+    private fun add(accepted: QsoRecord): LogOutcome {
         records.add(accepted)
         rawPoints += accepted.points
         rawMultiplierKeys += accepted.multipliers
@@ -143,6 +185,9 @@ class QsoLog {
         rawPoints = 0
         verifiedPoints = 0
     }
+
+    /** Callsigns are compared without the `?` the operator uses as "unknown" (`Log.pas:686`). */
+    private fun normalise(call: String): String = call.replace("?", "").trim().uppercase()
 
     companion object {
         /** Spec §6: a five-minute rate histogram. */
