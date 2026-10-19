@@ -4,3 +4,15 @@ upstream/
 !/.scratch/.gitkeep
 node_modules/
 *.log
+
+# Gradle / Android build output
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab

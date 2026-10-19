@@ -1,7 +1,7 @@
 # Morse Runner → Android
 
-> Status: **uninitialized** — grilling in progress. Glossary fills lazily as terms resolve.
-> (Per workspace init: facts below are verified, not assumed.)
+> Status: **building** — grilling complete, spec approved, Milestone A in progress (T1 shipped).
+> Facts below are verified against the upstream source or measured on this machine, not assumed.
 
 ## Verified facts — recon 2026-10-19
 
@@ -16,11 +16,25 @@
 - Stack: **Delphi / Pascal, VCL** — upstream states Windows-only. ≈13.1k LOC, 31 `.pas` + `.dpr`.
 - Contests: ARRL DX, ARRL Field Day, ARRL Sweepstakes, CQ WPX, CQ WW, IARU HF, NAQP,
   JARL ALL JA, JARL ACAG, CWOPS CWT, K1USN SST, HST.
-- Domain modules: `Contest.pas` (contest/exchange rules, 992), `DxOper.pas` (799),
+- Domain modules: `Contest.pas` (contest/exchange rules, 992), `DxOper.pas` (749),
   `Main.pas` (UI + QSO state machine, 2783), `Station.pas`, `DxStn/MyStn`, `Qrn/Qsb/Qrm`,
   `Log.pas` (log + scoring, 1172), `Ini.pas`, `CallLst/DXCC/SerNRGen`,
   `VCL/*` (CW audio synthesis: `MorseTbl`, `SndOut`, `SndCustm`, `Mixers`, `WavFile`).
 - Unit tests exist: `upstream/MorseRunnerCE/Test/*.pas` (callsign utils, DX oper, DXCC list, lexers, exchange parsers).
+
+### CW audio timing — transcribed, NOT textbook (verified in `VCL/`)
+The port must not use textbook PARIS numbers; Morse Runner's keyer differs deliberately:
+- One unit is `60/48/WPM` s = **1250/WPM ms** (`MorseKey.pas:249`, comment "48U = 1 word w/ 5U
+  inter-word space"). Textbook is `1200/WPM`; the word still lasts `60/WPM` s, so the *speed is
+  correct* while elements run ~4 % long.
+- Gaps (`MorseKey.pas:243-245`): **3U** inter-character, **5U** inter-word (not the textbook 7U),
+  **4U** inter-message.
+- Farnsworth (`FarnsKeyer.pas:292-293`; contests K1USN SST and CWops only, gated by
+  `Contest.pas:200 IsFarnsworthAllowed`, character rate default 25 from `Ini.pas:271`):
+  `DelayPerWord = 60/WpmS − 31·60/WpmC/48` seconds, stretched gap unit = `DelayPerWord/17`;
+  elements stay at `WpmC`. Invariant: `31 units @ WpmC + 17 units @ WpmS = 60/WpmS` s per word.
+- Envelope ramp is Blackman-Harris over `2.7 × riseTime × Rate` samples (`MorseKey.pas:150-154`),
+  not a plain cosine.
 
 ### Interaction model today (PC — the thing to adapt)
 - 12 function keys send canned messages: F1 CQ · F2 exchange · F3 TU · F4 my call ·
@@ -47,7 +61,7 @@
 | Q3 | **Contests are configuration documents**, imported at runtime; all 12 upstream contests preserved with no feature dropped | [0002](docs/adr/0002-contests-are-data.md) |
 | Q4 | **Bounded expression language** for contest behaviour (no loops/IO/reflection) | [0003](docs/adr/0003-bounded-expression-language.md) |
 
-Spec: [`docs/spec/mr-android-spec.md`](docs/spec/mr-android-spec.md) — status: draft for approval.
+Spec: [`docs/spec/mr-android-spec.md`](docs/spec/mr-android-spec.md) — status: **approved** (Q5).
 
 ## Glossary
 _Fills lazily as terms resolve. See spec §2 for the current set (Contest, Exchange, Message,
