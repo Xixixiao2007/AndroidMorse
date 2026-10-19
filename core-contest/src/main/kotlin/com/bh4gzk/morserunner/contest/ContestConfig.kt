@@ -194,6 +194,30 @@ data class HistoryColumn(
     val required: Boolean,
 )
 
+/**
+ * How a history's rows become the station pool, when a row-by-row predicate is not enough (T18).
+ *
+ * A [CallHistory.filter] is a per-row verdict: the pool is the rows it accepts, in file order.
+ * ARRL Field Day is the one contest whose pool is built by a **two-pass reduction over the whole
+ * file** — club stations first, deferred home/portable groups second, with a random 25 % cull
+ * (`ArrlFd.pas:192-383`). The bounded expression language has no group-by, no aggregate and no
+ * row-level randomness, so the strategy is a **named engine capability**, the same extension
+ * point discipline a built-in function follows (ADR-0018 §2).
+ *
+ * The key is the strategy *name*; its parameters and its random draws belong to the strategy
+ * (ADR-0018 §3), so a config that names one needs no second set of keys to keep in sync.
+ */
+enum class HistoryLoadMode(val key: String, val requiredColumns: List<String>) {
+    /**
+     * `ArrlFd.pas:192-383`: club stations (class suffix `A`/`C`/`F`) are added as they are read
+     * and the highest transmitter count wins within a club; home/portable stations (`D`/`E`/`B`)
+     * without a club name are kept one time in four; home/portable stations *with* a club name
+     * wait for the second pass, which drops a group whose club already owns a station and
+     * otherwise keeps one row from the group's top transmitter-count segment.
+     */
+    TWO_PASS_CLUBS("two-pass-clubs", listOf("class", "club")),
+}
+
 /** Header-driven column order (IARU HF: `!!Order!!,Call,Sect,UserText`, `IaruHf.pas:115-126`). */
 data class HeaderSpec(
     /** The line that starts the header; it defines columns instead of being skipped. */
@@ -222,6 +246,12 @@ data class CallHistory(
      * `ArrlDx.pas:157-158`. `null` keeps every row, which is what every earlier contest wants.
      */
     val filter: Expression? = null,
+    /**
+     * The load *strategy*, for a history whose pool is a reduction rather than a predicate (T18).
+     * `null` keeps the generic row-by-row parser, which is what every other contest wants. A
+     * strategy runs after [filter] and after the column rules, over the rows those accepted.
+     */
+    val load: HistoryLoadMode? = null,
 )
 
 // --- station ------------------------------------------------------------------

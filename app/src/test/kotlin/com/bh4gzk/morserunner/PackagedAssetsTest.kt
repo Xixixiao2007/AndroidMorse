@@ -518,6 +518,49 @@ class PackagedAssetsTest {
         )
     }
 
+    @Test
+    fun `the packaged ARRL Field Day history runs the two-pass club load into a roster`() {
+        // T18: the last per-contest ticket, and the only one whose history load is an algorithm
+        // (`ArrlFd.pas:192-383`). The file is upstream's `FDGOTA.txt`, copied unmodified
+        // (MPL-2.0, spec §9), keeping its name and case because Android assets are
+        // case-sensitive (the Pascal asks for `FDGOTA.TXT`).
+        val bundled = ContestLibrary.bundled()
+        assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
+        val config = bundled.configs.firstOrNull { it.id == "arrlfd" }
+        assertNotNull(config, "no bundled arrlfd config")
+        assertNotNull(config.callHistory?.load, "Field Day must declare its load strategy")
+
+        val file = File(assetsDir, config.callHistory!!.asset)
+        assertEquals(459_501, file.length().toInt(), "the packaged history is not upstream's FDGOTA.txt")
+        val history = assertIs<HistoryLoad.Loaded>(
+            CallHistoryFile.parse(file.readText(), config.callHistory!!, "DL1AA", data.callFacts, 20_261_020L),
+        ).history
+        // Measured on the shipped file after the two passes (ADR-0018 §4): 17 322 data rows
+        // reduce to 4 742 stations at this seed — the two-pass rule, not a row count.
+        assertEquals(4_742, history.size, "unexpected Field Day history size ${history.size}")
+        val sample = assertNotNull(history.recordFor(history.callAt(0)), history.callAt(0))
+        assertTrue(sample["class"].orEmpty().isNotEmpty())
+        assertTrue(sample["section"].orEmpty().isNotEmpty())
+
+        // The whole chain the device uses: packaged bytes → the config's own load strategy →
+        // the roster's exchange. Every station must send its class and its section.
+        val roster = StationRoster(
+            config = config,
+            pool = history,
+            history = history,
+            settings = RosterSettings(speedWpm = 25),
+            seed = 20_261_020L,
+            calls = data.callFacts,
+        )
+        repeat(StationRoster.MAX_STATIONS) { roster.add() }
+        assertEquals(StationRoster.MAX_STATIONS, roster.size)
+        roster.stations.forEach { station ->
+            val record = assertNotNull(history.recordFor(station.call), station.call)
+            assertEquals(record["class"].orEmpty(), station.exchange.exch1, station.call)
+            assertEquals(record["section"].orEmpty(), station.exchange.exch2, station.call)
+        }
+    }
+
     /** Magnitude of [hz] in [samples] (Goertzel); enough to prove a tone is present. */
     private fun toneAt(samples: FloatArray, frames: Int, hz: Double): Double {        val w = 2.0 * PI * hz / rate
         val coeff = 2.0 * cos(w)

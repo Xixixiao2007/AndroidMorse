@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "id": "arrlfd",
+  "name": "ARRL Field Day",
+  "duration": { "default": 30, "min": 1, "max": 60 },
+  "runModes": ["single-call", "pile-up"],
+  "constants": {},
+  "exchange": {
+    "myFields": [
+      { "key": "class", "type": "text", "label": "Class" },
+      { "key": "section", "type": "text", "label": "Section" }
+    ],
+    "sent": {
+      "exch1": "class",
+      "exch2": "section"
+    },
+    "their": {
+      "dice": [],
+      "bindings": {
+        "hisClass": { "source": "history", "column": "class" },
+        "hisSection": { "source": "history", "column": "section" }
+      },
+      "exch1": "hisClass",
+      "exch2": "hisSection"
+    }
+  },
+  "validation": [
+    { "field": "class", "when": "not matches(upper(class), '^[1-9][0-9]?[A-F]$')", "error": "Class is a transmitter count and a letter (e.g. 3A)" },
+    { "field": "section", "when": "not matches(upper(section), '^[A-Z]{2,3}$')", "error": "Section is two or three letters (e.g. OR)" }
+  ],
+  "scoring": {
+    "points": "2",
+    "multipliers": [
+      { "key": "'1'" }
+    ]
+  },
+  "callHistory": {
+    "asset": "FDGOTA.txt",
+    "delimiter": ",",
+    "skipPrefixes": ["#"],
+    "header": {
+      "marker": "!!Order!!",
+      "names": { "call": "Call", "class": "Exch1", "section": "Sect", "club": "UserText" }
+    },
+    "minFields": 3,
+    "columns": [
+      { "name": "call", "type": "callsign", "required": true },
+      { "name": "class", "type": "text", "required": true },
+      { "name": "section", "type": "text", "required": true },
+      { "name": "club", "type": "text" }
+    ],
+    "dedupe": false,
+    "requiresMyCallInDxcc": false,
+    "load": "two-pass-clubs"
+  },
+  "station": {
+    "callPool": "MASTER.DTA",
+    "speedRange": { "min": "speed - 5", "max": "speed + 10" },
+    "exchangeDefaults": { "class": "3A", "section": "OR" }
+  },
+  "messages": {
+    "CQ": "CQ FD <my>",
+    "longCQ": "CQ CQ FD <my> <my> FD"
+  },
+  "capabilities": { "farnsworth": false, "requiresMyDxcc": false }
+}

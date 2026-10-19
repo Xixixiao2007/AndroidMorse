@@ -58,7 +58,7 @@ class CwopsTest {
         val bundled = ContestLibrary.bundled()
         assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
         assertEquals(
-            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx", "hst", "arrldx"),
+            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx", "hst", "arrldx", "arrlfd"),
             bundled.configs.map { it.id },
         )
         assertEquals(ContestConfig.SUPPORTED_SCHEMA_VERSION, cwops.schemaVersion)

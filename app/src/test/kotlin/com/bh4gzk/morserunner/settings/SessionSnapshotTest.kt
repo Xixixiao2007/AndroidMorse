@@ -149,7 +149,7 @@ class SessionSnapshotTest {
     fun `a snapshot whose settings contest is not shipped still decodes to the identity`() {
         // A blob written by hand or by a build that shipped a later contest: the identity field
         // is the authority, and the settings blob falls back through the normal normalisation.
-        val original = snapshot().copy(contestId = "naqp", settings = settings.copy(contestId = "arrlfd"))
+        val original = snapshot().copy(contestId = "naqp", settings = settings.copy(contestId = "notacontest"))
         val decoded = assertNotNull(SessionSnapshotCodec.decode(SessionSnapshotCodec.encode(original)))
         assertEquals("naqp", decoded.contestId)
         assertEquals("cqww", decoded.settings.contestId)

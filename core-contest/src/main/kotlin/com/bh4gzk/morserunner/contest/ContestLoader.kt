@@ -227,7 +227,7 @@ private class Loader(private val source: String) {
             obj, path,
             setOf(
                 "asset", "delimiter", "skipPrefixes", "header", "minFields", "columns", "dedupe",
-                "requiresMyCallInDxcc", "filter",
+                "requiresMyCallInDxcc", "filter", "load",
             ),
         )
         val mark = errors.size
@@ -248,10 +248,30 @@ private class Loader(private val source: String) {
         val filter = obj.str("filter", path, required = false)?.let {
             compile(it, child(path, "filter"), columns.map { it.name }.toSet() + STATION_IDENTIFIERS)
         }
+        // T18: a load strategy is a named engine capability (ADR-0018 §2). It reads its columns
+        // by name, so a config that names it must declare them: a strategy with a missing column
+        // would silently load an empty pool instead of failing here.
+        val load = obj.str("load", path, required = false)?.let { name ->
+            HistoryLoadMode.entries.firstOrNull { it.key == name }
+                ?: run {
+                    error(
+                        child(path, "load"),
+                        "unknown load strategy '$name', expected " +
+                            HistoryLoadMode.entries.map { it.key },
+                    )
+                    null
+                }
+        }
+        if (load != null) {
+            val missing = load.requiredColumns.filter { required -> columns.none { it.name == required } }
+            if (missing.isNotEmpty()) {
+                error(child(path, "load"), "the '${load.key}' strategy requires columns $missing")
+            }
+        }
         return if (errors.size == mark) {
             CallHistory(
                 asset, delimiter, skipPrefixes, header, minFields, columns, dedupe,
-                requiresMyCallInDxcc, filter,
+                requiresMyCallInDxcc, filter, load,
             )
         } else {
             null

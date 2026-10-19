@@ -71,7 +71,7 @@ object SessionBootstrap {
         val historyLookup: HistoryLookup?
         val autocomplete: Collection<String>
         val note: String
-        when (val parsed = if (spec == null) null else history(assets, spec, settings.myCall, facts)) {
+        when (val parsed = if (spec == null) null else history(assets, spec, settings.myCall, facts, seed)) {
             // No call-history file at all (T15's CQ WPX): upstream reads `MASTER.DTA` as the
             // station pool and takes every exchange from the contest's generation rules
             // (`CqWpx.pas:87-97,299-317`), so there is nothing to parse and no note of loss —
@@ -117,16 +117,23 @@ object SessionBootstrap {
         return Result(controller, note)
     }
 
-    /** The contest's call history, parsed against its own spec (`CallHistoryFile`). */
+    /**
+     * The contest's call history, parsed against its own spec (`CallHistoryFile`).
+     *
+     * The session [seed] is the replay contract for a history whose load draws (T18, ADR-0018):
+     * the same seed is the same pool, which is what makes a resumed or disputed Field Day session
+     * reproducible. Every other contest's parser ignores it.
+     */
     private fun history(
         assets: AssetManager,
         spec: CallHistory,
         myCall: String,
         calls: CallFacts,
+        seed: Long,
     ): HistoryLoad {
         val text = StationAssets.readText(assets, spec.asset)
             ?: return HistoryLoad.Rejected("this build has no asset '${spec.asset}'")
-        return CallHistoryFile.parse(text, spec, myCall, calls)
+        return CallHistoryFile.parse(text, spec, myCall, calls, seed)
     }
 
     /** My own exchange: the contest's defaults, with the DXCC-derived values as a fallback. */

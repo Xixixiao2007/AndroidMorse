@@ -120,7 +120,12 @@ hardest — are expressible, so the remaining nine are expected to fit (ADR-0004
     // own columns plus the station properties, so the pool itself can depend on who I am.
     // ARRL DX is the case: a W/VE operator works the DX stations (the rows carrying a power) and
     // a DX operator works the W/VE stations (the rows carrying a state), `ArrlDx.pas:157-158`.
-    "filter": "ifElse(myCountry == 'United States of America' or myCountry == 'Canada', power != '', state != '')"
+    "filter": "ifElse(myCountry == 'United States of America' or myCountry == 'Canada', power != '', state != '')",
+    // Optional (T18): the load *strategy*, for a history whose pool is a reduction over the
+    // whole file rather than a per-row verdict. The name is the strategy's contract; its
+    // columns are declared by the config and checked by the loader. `"two-pass-clubs"` is ARRL
+    // Field Day's two-pass club load (`ArrlFd.pas:192-383`); absent keeps the generic parser.
+    "load": "two-pass-clubs"
   },
 
   "station": {
@@ -165,6 +170,19 @@ It **fails closed and loudly**: a predicate that cannot be evaluated (an operato
 not resolve in DXCC, so `myCountry` has no value), or one whose verdict is not a boolean, makes the
 whole history `Rejected` with the reason — never a silently empty pool.
 
+**The load strategy (T18).** `callHistory.load` names a loader capability for a history whose pool
+is an **algorithm**, not a predicate. `"two-pass-clubs"` is ARRL Field Day's
+(`ArrlFd.pas:192-383`): club stations (suffix `A`/`C`/`F`) enter as they are read and the highest
+transmitter count wins within a club; home/portable stations (`D`/`E`/`B`) with a club name wait
+for a second pass that drops a group whose club already owns a station and otherwise keeps one row
+from the group's top transmitter-count segment; home/portable stations without a club name are
+kept one time in four; the pool is sorted by call. The strategy reads the `class` and `club`
+columns **by name** and the loader rejects a config that names the strategy without them, or one
+that names an unknown strategy. Its 25 % draws are a **pure function of the session seed and the
+decision's identity** (ADR-0018 §3), so the same seed replays the same pool; a strategy is a
+sibling of `filter`, and a spec that carries both filters first and loads the survivors. It adds
+no identifier to the environment table and no built-in (ADR-0018 §2).
+
 **The running serial (T15).** For a contest that declares a `serial` field, `exchange.sent.*`
 sees that field's **current** value — the start (`station.exchangeDefaults`, else `1`) plus the
 contacts already logged — not the static configured value. Upstream keeps the number in
@@ -189,7 +207,9 @@ offending JSON or expression:
 - a `callHistory` block that is present but malformed. The key itself is optional (T15): absent
   means the contest has no history, and a `history` binding without one is rejected. Its optional
   `filter` (T17) is compiled against the history's own columns and the station properties, so a
-  filter that reads `theirCall` — or a column the block does not declare — is rejected here.
+  filter that reads `theirCall` — or a column the block does not declare — is rejected here. Its
+  optional `load` (T18) must name a known strategy, and the strategy's required columns must be
+  declared (`"two-pass-clubs"` needs `class` and `club`).
 
 ## 5. Expression language
 
@@ -296,9 +316,11 @@ files. Data files are redistributed unmodified.
 | T7 | Compose UI: 2×4 grid, entry + autocomplete, status/rate | T6 | playable on a phone |
 | T8 | Realism effects QRM/QRN/QSB/flutter/LIDS | T5 | authentic sound |
 | T9 | Settings + persistence (duration, speed, pitch, RIT, bandwidth) | T7 | configurable session |
-| T10–T20 | One ticket per remaining contest (11 configs + behaviour checks) | T3, T6 | all 12 contests preserved |
+| T10–T18 | One ticket per remaining contest (9 configs + behaviour checks) | T3, T6 | all 12 contests preserved — **T18 completed the series: every `BUNDLED_IDS` id ships a document** |
 
-**Milestone A (playable CQ WW): T1–T7.** Milestone B: T8, T9. Milestone C: T10–T20.
+**Milestone A (playable CQ WW): T1–T7.** Milestone B: T8, T9. Milestone C: T10–T18 (the queue
+numbered the span T10–T20, but only nine contests were left after T3; T18 was the ninth, and the
+twelfth document overall).
 
 ## 12. Risks
 

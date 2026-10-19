@@ -193,9 +193,9 @@ class SettingsTest {
         assertEquals("cqww", SessionSettings.DEFAULT.contestId)
         assertEquals("cqww", SessionSettings(contestId = "no-such-contest").normalized().contestId)
         assertEquals("cqww", SessionSettings(contestId = "").normalized().contestId)
-        // A registered upstream id whose document this build does not ship yet is not selectable
-        // either: the manifest, not the twelve-name registry, is what can actually be started.
-        assertEquals("cqww", SessionSettings(contestId = "arrlfd").normalized().contestId)
+        // An id no build shipped (T18 shipped the last of the twelve) is not selectable either:
+        // the manifest, not the twelve-name registry, is what can actually be started.
+        assertEquals("cqww", SessionSettings(contestId = "notacontest").normalized().contestId)
     }
 
     @Test
@@ -212,7 +212,7 @@ class SettingsTest {
         assertEquals(chosen, SettingsCodec.decode(SettingsCodec.encode(chosen)))
 
         // A blob written by an older build, or by hand, cannot select a missing document.
-        assertEquals("cqww", SettingsCodec.decode("contest=arrlfd").contestId)
+        assertEquals("cqww", SettingsCodec.decode("contest=notacontest").contestId)
         assertEquals("cqww", SettingsCodec.decode("contest=").contestId)
     }
 }

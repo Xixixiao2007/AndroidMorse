@@ -11,7 +11,8 @@ package com.bh4gzk.morserunner.contest
  * readable through the class loader, so the app gets them for free.
  *
  * A manifest keeps discovery explicit instead of scanning the classpath: T3 shipped three of
- * the twelve [ContestRegistry.bundledIds] and T10–T20 add the rest here, one ticket each.
+ * the twelve [ContestRegistry.bundledIds] and T10–T18 added the rest here, one ticket each —
+ * T18 (ARRL Field Day) was the last, so all twelve now ship a document.
  * A nested listing API that "finds whatever is on the classpath" would hide a missing
  * document; a manifest makes it a load error.
  *

@@ -75,12 +75,16 @@ class CallHistoryFile private constructor(
          * @param calls the DXCC provider for that gate. Its default
          *   ([CallFacts.Unavailable]) refuses the gate, which is the fail-closed
          *   behaviour a caller that has not wired the data layer should see.
+         * @param seed the session seed, read only by a spec that declares a [HistoryLoadMode]
+         *   (T18): the strategy's draws are a pure function of it, so the same seed replays the
+         *   same pool. A spec without a strategy draws nothing and ignores it.
          */
         fun parse(
             text: String,
             spec: CallHistory,
             myCall: String = "",
             calls: CallFacts = CallFacts.Unavailable,
+            seed: Long = 0L,
         ): HistoryLoad {
             if (spec.columns.none { it.name == CALL_COLUMN }) {
                 return HistoryLoad.Rejected(
@@ -110,6 +114,10 @@ class CallHistoryFile private constructor(
             val headerIndices = HashMap<String, Int>()
             var headerSeen = spec.header == null
             val duplicates = if (spec.dedupe) HashSet<String>() else null
+            // T18: a load strategy is a reduction over the whole file, so it needs the rows in
+            // file order — including duplicates, which the generic map would overwrite.
+            val load = spec.load
+            val orderedRows = if (load == null) null else ArrayList<Map<String, String>>()
             // T17: the row predicate. The station properties are bound once — the file is read
             // once — and each row overwrites only the cell names it declares.
             val filter = spec.filter
@@ -162,15 +170,21 @@ class CallHistoryFile private constructor(
                     if (!keep) continue
                 }
                 if (duplicates != null && !duplicates.add(call)) continue
-                records[call] = record
+                if (orderedRows != null) orderedRows += record else records[call] = record
             }
 
-            if (records.isEmpty()) {
+            // The strategy runs over the rows the column rules (and the row filter, when a spec
+            // has one) accepted; a plain history keeps its file order, while a strategy defines
+            // its own order (Field Day sorts by call, `ArrlFd.pas:349`).
+            val finalRecords: Map<String, Map<String, String>> =
+                if (load != null && orderedRows != null) TwoPassClubLoad.apply(orderedRows, seed) else records
+
+            if (finalRecords.isEmpty()) {
                 return HistoryLoad.Rejected(
                     "call history '${spec.asset}' has no usable records for this contest",
                 )
             }
-            return HistoryLoad.Loaded(CallHistoryFile(records))
+            return HistoryLoad.Loaded(CallHistoryFile(finalRecords))
         }
 
         internal const val CALL_COLUMN: String = "call"

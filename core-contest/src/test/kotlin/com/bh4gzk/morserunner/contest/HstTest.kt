@@ -68,6 +68,7 @@ class HstTest {
         assertEquals(
             listOf(
                 "cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx", "hst", "arrldx",
+                "arrlfd",
             ),
             bundled.configs.map { it.id },
         )

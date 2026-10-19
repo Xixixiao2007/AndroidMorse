@@ -203,6 +203,74 @@ class RealCallHistoryTest {
         assertTrue(history.calls.none { it.startsWith("#") || it.startsWith("!!") })
     }
 
+    @Test
+    fun `the real Field Day history runs the two-pass club load`() {
+        // T18: the only contest whose history *load* is an algorithm (`ArrlFd.pas:192-383`), so
+        // this is the only real-file test whose expected pool is not a simple row count. The
+        // file is upstream's `FDGOTA.txt`, copied unmodified (MPL-2.0, spec §9).
+        val spec = spec("arrlfd")
+        val file = asset(spec.asset)
+        assumeTrue("no ${spec.asset} next to ${upstream ?: "the repo root"}", file != null)
+        val text = file!!.readText()
+        val seed = 20_261_020L
+
+        fun pool(atSeed: Long): CallHistoryFile =
+            assertIs<HistoryLoad.Loaded>(
+                CallHistoryFile.parse(text, spec, "DL1AA", CallFacts.Unavailable, atSeed),
+            ).history
+
+        val history = pool(seed)
+        // Measured: 17 330 lines → 17 322 data rows → 3 047 club stations (one per occupied club
+        // plus the anonymous ones), about 1 228 of the 4 914 anonymous home/portable rows kept
+        // one in four, and one station from each of the 1 257 free clubs (ADR-0018 §4).
+        // Measured at the seed the whole suite replays with; the count is the replay contract.
+        assertEquals(4_742, history.size, "unexpected Field Day pool size ${history.size}")
+        assertTrue(history.calls.all { history.recordFor(it)?.get("class").orEmpty().isNotEmpty() })
+        assertTrue(history.calls.all { history.recordFor(it)?.get("section").orEmpty().isNotEmpty() })
+        assertTrue(history.calls.none { it.startsWith("#") || it.startsWith("!!") })
+
+        // Replay: the same seed is the same pool, call for call and in the same order.
+        assertEquals(history.calls.toList(), pool(seed).calls.toList(), "the same seed did not replay")
+        // A different seed moves both the one-in-four cull and the within-club picks.
+        assertTrue(history.calls.toSet() != pool(seed + 1).calls.toSet(), "two seeds produced one pool")
+
+        // The rule's structural invariants, checked against the file's own rows:
+        //  - a club whose club station is in the pool keeps no home/portable station;
+        //  - the pool's club station is the club's highest transmitter count;
+        //  - a home/portable station in the pool belongs to a club the pool does not occupy.
+        val rows = text.lineSequence()
+            .map { it.trimEnd('\r') }
+            .filter { it.isNotBlank() && !it.startsWith('!') && !it.startsWith('#') }
+            .map { line -> line.split(',').map { it.trim() } }
+            .filter { it.size >= 4 && it[3].isNotEmpty() }
+            .map { cells -> cells[0].uppercase() to cells }
+            .toMap()
+        fun classOf(call: String): String = history.recordFor(call)?.get("class").orEmpty()
+        fun clubOf(call: String): String = rows[call]?.getOrNull(3).orEmpty()
+        fun txCount(klass: String): Int = klass.takeWhile { it in '0'..'9' }.toIntOrNull() ?: 0
+        val clubStationsByClub = history.calls
+            .filter { classOf(it).last() in setOf('A', 'C', 'F') && clubOf(it).isNotEmpty() }
+            .groupBy { clubOf(it) }
+        val homePortableByClub = history.calls
+            .filter { classOf(it).last() in setOf('B', 'D', 'E') && clubOf(it).isNotEmpty() }
+            .groupBy { clubOf(it) }
+        assertTrue(
+            clubStationsByClub.keys.intersect(homePortableByClub.keys).isEmpty(),
+            "a club has both a club station and a deferred station in the pool",
+        )
+        val fileClubStationsByClub = rows.values
+            .filter { it[1].last() in setOf('A', 'C', 'F') && it.getOrNull(3).orEmpty().isNotEmpty() }
+            .groupBy { it[3] }
+        clubStationsByClub.forEach { (club, kept) ->
+            val highest = fileClubStationsByClub.getValue(club).maxOf { txCount(it[1]) }
+            assertEquals(
+                highest,
+                txCount(classOf(kept.single())),
+                "club '$club' kept a station below its highest transmitter count",
+            )
+        }
+    }
+
     private val knowsW1Aw = object : CallFacts {
         override fun prefix(call: String): String? = null
         override fun zone(call: String): Double? = null

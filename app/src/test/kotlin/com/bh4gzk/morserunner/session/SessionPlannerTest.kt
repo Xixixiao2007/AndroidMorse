@@ -66,8 +66,9 @@ class SessionPlannerTest {
 
     @Test
     fun `a stored contest this build does not ship cannot be started`() {
-        // A settings blob from a build that shipped another contest, or a hand-edited value.
-        backing.write(SettingsStore.KEY, "contest=arrlfd\nspeed=30")
+        // A hand-edited value, or an id from a build that shipped another contest. T18 shipped
+        // the last of the twelve, so the example is now an id no build ever shipped.
+        backing.write(SettingsStore.KEY, "contest=notacontest\nspeed=30")
         val plan = SessionPlanner.plan(settings, sessions, now = 5L)
         assertEquals("cqww", plan.contestId)
         assertEquals(30, plan.settings.speedWpm, "the rest of the settings are still read")

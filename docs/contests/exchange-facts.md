@@ -280,7 +280,34 @@ predicate over the row's cells and the station properties. The sent piece is *no
 upstream types one box and sends it either way, so the document's `sent.exch2` is the field itself.
 The multiplier is one `ifElse` over `myCountry`, an identifier `scoring` already had.
 
-### Data inventory for the remaining per-contest tickets (verified 2026-10-20)
+## ARRL Field Day — `ArrlFd.pas` (T18, the ninth and last per-contest ticket — the only *load* that is an algorithm)
+
+| | |
+|---|---|
+| contest class | `TArrlFieldDay : TContest` (`ArrlFd.pas:58-61`) |
+| **the exchange** | `etFdClass` + `etArrlSection` (`Ini.pas:118-125`), `ExchFieldEditable: True`, `ExchDefault: '3A OR'` |
+| my exchange | the two typed strings, sent as they are (`ArrlFd.pas:495-510`) |
+| station exchange | `Exch1 := StnClass`, `Exch2 := Section` — both from the history (`:495-510`) |
+| **the pool** | `FDGOTA.txt` — header-driven `!!Order!!,Call,Exch1,Sect,UserText`; 17 322 data rows |
+| **the load** | **two passes** (`:192-383`): club stations (`A`/`C`/`F`) enter as read, the highest `TxCnt` per club wins; home/portable (`D`/`E`/`B`) **with** a club are deferred to pass 2 (whole group dropped if the club is occupied, else one row from the top `TxCnt` segment, kept if `B` or 25 %); home/portable **without** a club are kept 25 % |
+| **points** | **2**, unconditionally (`:479-486` `Qso^.Points := 2`) |
+| **multiplier** | **none** — `Result := '1'` (one constant key, the same shape as HST's sum) |
+| messages | `msgCQ` → `CQ FD <my>`; `msgLongCQ` → `CQ CQ FD <my> <my> FD`; `msgNrQm` picks `NR?`/`SECT?`/`CLASS?`/`CL?` by `Floor(R1*5)` |
+| station info | `GetStationInfo` appends the club name, plus the entity for a `DX` section (`:455-480`) |
+| capability flags | no Farnsworth flag; the contest never looks the operator up, so `requiresMyDxcc: false` |
+
+Implemented in `contests/arrlfd.json` (ADR-0018). It is the one contest whose station pool is a
+**reduction over the whole file** rather than a row predicate, so the schema gained
+`callHistory.load` — a *named load strategy* (`"two-pass-clubs"`) whose algorithm lives in the
+engine because the bounded language has no group-by, no aggregate and no row-level randomness. The
+25 % draws are a pure function of the session seed and the decision's identity (purpose `keep` and
+the callsign, purpose `pick` and the club name), so the same seed replays the same pool; measured,
+17 322 rows reduce to **4 742 stations at seed 20 261 020**, the count the tests pin. Deviations
+(ADR-0018 §7): the four repeat-question wordings are not ported (the port sends `NR?`), the
+club-name info line does not exist in the port (ADR-0011 §8), and the file's two duplicate calls
+collapse to one entry each.
+
+### Data inventory (all twelve contests, verified 2026-10-20)
 
 | Asset | Used by | State |
 |---|---|---|
@@ -291,7 +318,7 @@ The multiplier is one `ifElse` over `myCountry`, an identifier `scoring` already
 | `JARL_ALLJA.TXT` (2 542 lines, `call,exch1[,usertext]`, `#` banner) | JARL ALL JA (`AllJa.pas:72-100`) | packaged (T12) — RST `599` + `<pref><power>`; no serial; 1 point; multiplier = `Exch2` minus a trailing `L/M/H/P` (`:190-207`) |
 | `JARL_ACAG.TXT` (2 551 lines, `call,exch1[,usertext]`, `#` banner) | JARL ACAG (`Acag.pas:72-100`) | packaged (T13) — RST `599` + `<city\|gun\|ku><power>`; no serial; 1 point; multiplier = `Exch2` minus a trailing `L/M/H/P` (`:191-207`), a **string** so leading zeros survive |
 | `CWOPS.LIST` (6 344 lines, header-driven `!!Order!!,Call,Name,Exch1,UserText`) | CWops CWT (`CwOps.pas:74`) | packaged (T14) — name + CWT number/state/country from the file; 1 point; multiplier = **the worked call**; no serial |
-| `FDGOTA.txt` (17 330 lines, `!!Order!!,Call,Exch1,Sect,UserText`) | ARRL Field Day (`ArrlFd.pas:224`) | **not packaged** — class + section from the file; the two-pass club-name logic (`:227-260`) is engine code |
+| `FDGOTA.txt` (17 330 lines, `!!Order!!,Call,Exch1,Sect,UserText`) | ARRL Field Day (`ArrlFd.pas:192-383`) | packaged (T18) — 17 322 data rows, class suffix `D` 8 817 / `A` 2 909 / `E` 2 862 / `B` 2 120 / `F` 378 / `C` 236; 12 240 rows carry a club name over 4 136 clubs. The pool is **the two-pass club load** (`callHistory.load: "two-pass-clubs"`), which reduces the 17 322 rows to 4 742 stations at seed 20 261 020 |
 | — | CQ WPX | packaged (T15) — **no history at all**: `MASTER.DTA` is the pool and every exchange piece is generated; RST + a **running serial** (the first contest with one); 1 point; multiplier = the worked call's WPX prefix |
 | — | HST (High Speed Test) | packaged (T16) — **no history at all**: `MASTER.DTA` is the pool; RST + a running serial (reusing T15's); points = the worked call's **Morse weight**; the raw/verified totals are **sums**, expressed as one constant multiplier key |
 | `HstResults.txt` | HST results (`Main.pas:2210-2230` `PopupScoreHst`) | an **output**, not an asset: upstream appends a `date, call, operator, score` line to it and the shipped file is 0 bytes. Not packaged (T16 corrected this row, which used to read "results import") |
