@@ -1,6 +1,6 @@
 package com.bh4gzk.morserunner.contest
 
-import com.bh4gzk.morserunner.data.MasterDta
+import com.bh4gzk.morserunner.data.CallPool
 import com.bh4gzk.morserunner.expr.CallFacts
 import com.bh4gzk.morserunner.expr.DEFAULT_STEP_BUDGET
 import com.bh4gzk.morserunner.expr.EvalResult
@@ -100,7 +100,8 @@ data class RosterStation(
 /**
  * The 0–8 concurrent simulated stations (spec §6, ticket T5).
  *
- * Each [add] draws a call from the `station.callPool` (`MASTER.DTA`), generates
+ * Each [add] draws a call from the [pool] (the contest's call history when it has one,
+ * `MASTER.DTA` otherwise — upstream's `TContest.PickStation`), generates
  * that call's exchange through [TheirExchangeGenerator] using the call's
  * call-history values, its serial and its declared dice, and gives it the audible
  * properties upstream gives a DX station (`DxStn.pas:73-90`):
@@ -129,7 +130,7 @@ data class RosterStation(
  */
 class StationRoster(
     private val config: ContestConfig,
-    private val pool: MasterDta,
+    private val pool: CallPool,
     private val history: HistoryLookup? = null,
     private val settings: RosterSettings,
     val seed: Long,

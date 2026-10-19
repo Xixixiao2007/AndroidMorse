@@ -95,4 +95,16 @@ object StationAssets {
         masterBytes = assets.open(MASTER).use { it.readBytes() },
         dxccText = assets.open(DXCC).use { it.readBytes().toString(Charsets.UTF_8) },
     )
+
+    /**
+     * The text of one packaged asset, or `null` when this build does not carry it.
+     *
+     * The contest's call-history file is named by its config (`callHistory.asset`, spec §9),
+     * not by this object: a contest document may name a file T10's build adds.
+     */
+    fun readText(assets: AssetManager, name: String): String? = try {
+        assets.open(name).use { it.readBytes().toString(Charsets.ISO_8859_1) }
+    } catch (missing: java.io.IOException) {
+        null
+    }
 }

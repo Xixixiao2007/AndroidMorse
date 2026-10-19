@@ -1,5 +1,6 @@
 package com.bh4gzk.morserunner.contest
 
+import com.bh4gzk.morserunner.data.CallPool
 import com.bh4gzk.morserunner.data.Callsign
 import com.bh4gzk.morserunner.expr.CallFacts
 
@@ -34,13 +35,18 @@ sealed interface HistoryLoad {
  */
 class CallHistoryFile private constructor(
     private val records: Map<String, Map<String, String>>,
-) : HistoryLookup {
+) : HistoryLookup, CallPool {
+
+    /** The calls in file order; that order is the pool's replay contract. */
+    private val callOrder: List<String> = records.keys.toList()
 
     /** The number of usable calls. */
-    val size: Int get() = records.size
+    override val size: Int get() = callOrder.size
 
     /** The usable calls, in file order. */
     val calls: Set<String> get() = records.keys
+
+    override fun callAt(index: Int): String = callOrder[index]
 
     override fun recordFor(call: String): Map<String, String>? = records[Callsign.normalise(call)]
 

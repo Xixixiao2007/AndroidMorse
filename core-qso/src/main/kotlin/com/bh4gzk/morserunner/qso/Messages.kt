@@ -87,8 +87,12 @@ class MessageScript(
      * The text for [message]. [hisCall] is the station being worked, which changes during a
      * contact — that is why it is an argument rather than part of [operator].
      */
-    fun text(message: QsoMessage, hisCall: String = ""): String =
-        expand(wordings[message.configKey] ?: default(message), hisCall)
+    fun text(message: QsoMessage, hisCall: String = ""): String = renderTokens(
+        template = wordings[message.configKey] ?: default(message),
+        my = operator.call,
+        exchange = operator.exchange.piece,
+        hisCall = hisCall,
+    )
 
     /** Upstream's default wording per message (`Contest.pas:412-450`). */
     private fun default(message: QsoMessage): String = when (message) {
@@ -104,10 +108,19 @@ class MessageScript(
         QsoMessage.NR_QM -> "NR?"
         QsoMessage.AGN -> "AGN"
     }
+}
 
-    private fun expand(template: String, hisCall: String): String = template
-        .replace("<#>", operator.exchange.piece)
-        .replace("<my>", operator.call)
+/**
+ * Expands the three message tokens (`Station.pas:242-300` `SendText`): `<#>` the sender's
+ * exchange, `<my>` the sender's call, `<his>` the station being worked.
+ *
+ * One rendering routine serves both directions — [MessageScript] for my station and
+ * [StationScript] for a simulated one — because the tokens are relative to the *sender*, and a
+ * second copy of this rule is what T6's finding F5 declined to add.
+ */
+internal fun renderTokens(template: String, my: String, exchange: String, hisCall: String): String =
+    template
+        .replace("<#>", exchange)
+        .replace("<my>", my)
         .replace("<his>", hisCall)
         .trim()
-}

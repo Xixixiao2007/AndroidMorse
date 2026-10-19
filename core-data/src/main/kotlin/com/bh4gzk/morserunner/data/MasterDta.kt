@@ -27,9 +27,9 @@ class MasterDta private constructor(
 
     /** Callsigns, ordinal-sorted and deduplicated, exactly as upstream leaves them. */
     val calls: List<String>,
-) {
+) : CallPool {
 
-    val size: Int get() = calls.size
+    override val size: Int get() = calls.size
 
     val isEmpty: Boolean get() = calls.isEmpty()
 
@@ -37,7 +37,7 @@ class MasterDta private constructor(
     fun contains(call: String): Boolean = calls.binarySearch(call) >= 0
 
     /** The callsign at [index]; lets a caller pick with its own seeded random source. */
-    fun callAt(index: Int): String = calls[index]
+    override fun callAt(index: Int): String = calls[index]
 
     override fun toString(): String = "MasterDta(${calls.size} calls)"
 
