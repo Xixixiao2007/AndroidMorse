@@ -1,0 +1,76 @@
+name: build
+
+# Documentation-only pushes must not burn Actions minutes: the whole repo is a
+# port whose expensive work is Gradle, and a README edit does not change it.
+# (Also: editing this file alone will therefore not trigger a run — use
+#  "Run workflow" if you change the workflow and want to prove it.)
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+      - 'LICENSE*'
+      - 'NOTICE*'
+      - '.gitignore'
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+      - 'LICENSE*'
+      - 'NOTICE*'
+      - '.gitignore'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # The project has no Gradle wrapper (this machine builds with a local 8.9
+      # install), so install the same version here.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      # `-Pkotlin.incremental=false`: two Gradle builds in one working tree
+      # corrupt the Kotlin incremental cache (see AGENTS.md). Harmless here, and
+      # it keeps CI behaviour identical to the documented local command.
+      - name: Build and test
+        run: gradle assembleDebug test --no-daemon -Pkotlin.incremental=false
+
+      # A skipped test is not evidence: fail if any suite reported a skip.
+      - name: Verify test results (no silent skips)
+        run: python3 tools/verify-tests.py --strict
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/test'
+          if-no-files-found: ignore
+          retention-days: 7
