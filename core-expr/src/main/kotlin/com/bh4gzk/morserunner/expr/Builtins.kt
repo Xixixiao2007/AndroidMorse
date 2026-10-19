@@ -22,6 +22,17 @@ interface CallFacts {
 
     fun country(call: String): String?
 
+    /**
+     * Which continent the call is on (`"NA"`, `"EU"`, …); `null` when unknown.
+     *
+     * Added by the T3 pressure test (ADR-0004): CQ WW (`CqWW.pas:258-265`) and
+     * IARU HF (`IaruHf.pas:337-348`) both score on continent equality, which
+     * [country] cannot answer. The default implementation answers `null` so a
+     * provider that predates this method keeps failing closed instead of
+     * silently claiming "same continent" — the language never guesses.
+     */
+    fun continent(call: String): String? = null
+
     fun arrlSection(call: String): String?
 
     companion object {
@@ -30,6 +41,7 @@ interface CallFacts {
             override fun prefix(call: String): String? = null
             override fun zone(call: String): Double? = null
             override fun country(call: String): String? = null
+            override fun continent(call: String): String? = null
             override fun arrlSection(call: String): String? = null
         }
     }
@@ -61,10 +73,15 @@ internal object Builtins {
         Signature("substr", 2, 3),
         Signature("matches", 2, 2),
         Signature("num", 1, 1),
+        // Added by the T3 pressure test (ADR-0004).
+        Signature("str", 1, 1),
         Signature("callPrefix", 1, 1),
         Signature("callZone", 1, 1),
         Signature("callCountry", 1, 1),
+        Signature("callContinent", 1, 1),
         Signature("arrlSectionOf", 1, 1),
+        Signature("indexOf", 2, 2),
+        Signature("listAt", 2, 2),
         Signature("unique", 1, 1),
         Signature("count", 1, 1),
         Signature("sum", 1, 1),

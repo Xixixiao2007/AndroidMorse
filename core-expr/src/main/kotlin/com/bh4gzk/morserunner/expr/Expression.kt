@@ -27,6 +27,17 @@ sealed interface EvalResult {
 class Expression internal constructor(internal val root: Node) {
 
     /**
+     * The free identifiers this program reads, sorted.
+     *
+     * Compiling resolves functions and arity but cannot know what the caller's
+     * environment will bind. A contest loader can therefore compare this set
+     * with the environment it promises (spec §4) and reject a misspelled field
+     * **at load time** instead of failing mid-QSO with
+     * [ErrorKind.UNKNOWN_IDENTIFIER]. Added by the T3 pressure test (ADR-0004).
+     */
+    fun identifiers(): Set<String> = buildSet { collectIdentifiers(root, this) }.toSortedSet()
+
+    /**
      * Evaluates the program against [environment].
      *
      * @param environment identifier bindings (exchange fields, station
@@ -88,4 +99,24 @@ fun evaluateExpression(
 ): EvalResult = when (val compiled = compileExpression(source)) {
     is CompileResult.Success -> compiled.expression.evaluate(environment, budget, calls)
     is CompileResult.Failure -> EvalResult.Failure(compiled.error)
+}
+
+/** Structural walk behind [Expression.identifiers]. Every branch is visited. */
+private fun collectIdentifiers(node: Node, into: MutableSet<String>) {
+    when (node) {
+        is Node.Identifier -> into += node.name
+        is Node.Unary -> collectIdentifiers(node.operand, into)
+        is Node.Binary -> {
+            collectIdentifiers(node.left, into)
+            collectIdentifiers(node.right, into)
+        }
+        is Node.Conditional -> {
+            collectIdentifiers(node.condition, into)
+            collectIdentifiers(node.whenTrue, into)
+            collectIdentifiers(node.whenFalse, into)
+        }
+        is Node.Call -> node.arguments.forEach { collectIdentifiers(it, into) }
+        is Node.ListLiteral -> node.items.forEach { collectIdentifiers(it, into) }
+        is Node.NumberLiteral, is Node.StringLiteral, is Node.BooleanLiteral -> Unit
+    }
 }

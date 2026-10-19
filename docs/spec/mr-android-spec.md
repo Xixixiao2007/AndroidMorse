@@ -42,70 +42,130 @@ core-audio/       Morse timing table, sample synthesis, mixer  (pure Kotlin/JVM 
 `core-*` have **no Android dependencies** so they run as fast JVM unit tests; `app` wires them
 to Compose, `AudioTrack` and `SharedPreferences`.
 
-## 4. Contest configuration (schema v1 — draft)
+## 4. Contest configuration (schema v1 — settled by T3)
+
+One JSON document per contest, loaded and validated at runtime (ADR-0002). The draft in
+this section was frozen after the T3 pressure test: CQ WW, ARRL SS and IARU HF — the three
+hardest — are expressible, so the remaining nine are expected to fit (ADR-0004).
 
 ```jsonc
 {
   "schemaVersion": 1,
   "id": "cqww",
   "name": "CQ World Wide DX CW",
-  "duration": { "default": 30, "min": 1, "max": 60 },
-  "runModes": ["single-call", "pile-up", "competition"],
+  "duration": { "default": 30, "min": 1, "max": 60 },   // minutes
+  "runModes": ["single-call", "pile-up"],               // subset of single-call|pile-up|competition
+
+  // Expression constants, injected as identifiers into every evaluation.
+  "constants": { "arrlSections": ["CO", "IA", "…"] },
+
   "exchange": {
+    // What the operator types. type ∈ rst|int|serial|enum|check|text.
     "myFields": [
-      { "key": "rst",  "type": "rst", "send": "5NN" },
+      { "key": "rst",  "type": "rst", "send": "5NN", "label": "RST" },
       { "key": "zone", "type": "int", "range": [1, 40], "label": "CQ Zone" }
     ],
-    "theirPattern": "{rst} {zone}"
+    // Optional: one text box parsed as a whole; the named groups are field keys.
+    "entryParse": { "pattern": "^(?P<nr>[0-9]+) (?P<prec>[QABUMS])$" },
+    // Optional: how my exchange splits into the two sent pieces.
+    "sent": { "exch1": "str(nr) + ' ' + prec", "exch2": "…" },
+
+    // The station being worked: generation rules, not an expectation string.
+    "their": {
+      "dice": ["d0", "d1"],                       // seeded draws in [0,1), supplied by the runtime
+      "bindings": {
+        "hisZone": { "source": "history", "column": "zone" },
+        "hisSer":  { "source": "serial" }
+      },
+      "derive": { "zone": "ifElse(num(hisZone) < 9 and d0 < 0.05, '0' + hisZone, hisZone)" },
+      "parse": { "pattern": "^(?P<chk>[0-9]{2}) (?P<sect>[A-Z]{2,3})$" },   // → theirChk, theirSect
+      "exch1": "'599'",
+      "exch2": "zone"
+    }
   },
+
   "validation": [
-    { "field": "zone", "when": "not (zone >= 1 and zone <= 40)",
-      "error": "Invalid CQ zone" }
+    { "field": "zone", "when": "not (zone >= 1 and zone <= 40)", "error": "Invalid CQ zone" }
   ],
+
   "scoring": {
-    "points": "1",
-    "multipliers": ["callZone(theirCall)", "zone"]
+    "points": "…",
+    "multipliers": [ { "key": "'ZN-' + str(zone)" }, { "key": "…", "when": "…" } ]
   },
-  "callHistory": { "asset": "callhistory/cqww.txt" },
+
+  "callHistory": {
+    "asset": "CQWWCW.TXT",
+    "delimiter": ",",
+    "skipPrefixes": ["!!Order!!", "#"],
+    "header": { "marker": "!!Order!!", "names": { "call": "Call", "zone": "CQ Zone" } },
+    "minFields": 3,
+    "columns": [
+      { "name": "call",     "index": 0, "type": "callsign" },
+      { "name": "zone",     "index": 1, "type": "digits", "required": true },
+      { "name": "userText", "index": 2, "type": "text" }
+    ],
+    "dedupe": false,
+    "requiresMyCallInDxcc": false
+  },
+
   "station": {
     "callPool": "MASTER.DTA",
-    "speedRange": [speed - 5, speed + 10],
+    "speedRange": { "min": "speed - 5", "max": "speed + 10" },
     "exchangeDefaults": { "rst": "599" }
-  }
+  },
+
+  "messages": { "CQ": "CQ SS <my>", "longCQ": "CQ CQ SS <my> <my> SS" },
+  "capabilities": { "farnsworth": false, "requiresMyDxcc": false }
 }
 ```
 
-An `ArrlSS` variant shows the pressure points the schema must survive:
+### The evaluation environment (fixed contract)
 
-```jsonc
-"exchange": {
-  "myFields": [
-    { "key": "nr",     "type": "serial", "range": [1, 999] },
-    { "key": "prec",   "type": "enum", "values": ["A","B","Q","M","U"] },
-    { "key": "check",  "type": "int", "check": "twoDigits" },
-    { "key": "section","type": "enum", "values": "arrlSections" }
-  ]
-},
-"validation": [
-  { "when": "prec == 'M' and check > 65", "error": "Check must be ≤ 65 for multi-op" }
-]
-```
+Every expression is evaluated against this identifier set; any other identifier is a
+**load-time error**, so a misspelled field can never reach a QSO.
 
-**Open item (blocking ticket T3):** validate this schema against the *hardest* three contests
-(CQ WW, ARRL SS, IARU HF) before building the engine. If a contest cannot be expressed,
-revise the schema now — not after 12 configs exist.
+| Expression | Identifiers available |
+|---|---|
+| `station.speedRange.*` | `speed` |
+| `exchange.sent.*` | `myFields[].key` |
+| `exchange.their.derive.*` | earlier derives, `their.bindings` names, `their.dice` |
+| `exchange.their.exch1/exch2` | derives, bindings, dice |
+| `validation[].when` | `myFields[].key` |
+| `scoring.points`, `scoring.multipliers[].key/when` | `myFields[].key`, `theirCall`, `theirExch1`, `theirExch2`, `their<Group>` from `their.parse`, `myCall`, `myCountry`, `myContinent`, `myZone`, `mySection` |
+| every expression above | `constants` |
+
+`myCountry`/`myContinent` come from the DXCC lookup of the operator's own call (spec §9);
+`theirCall`/`theirExch*`/`their<Group>` are the logged values of the QSO.
+
+### Load-time validation (what a bad config cannot do)
+
+The loader rejects a document — naming the file, the field and the `line:col` of the
+offending JSON or expression:
+
+- JSON syntax, wrong type, unknown field, missing required field, bad enum value;
+- expression compile errors: syntax, unknown function, arity, literal regex
+  (`ExprError.render()`);
+- an identifier outside the environment table above;
+- an invalid `entryParse`/`their.parse` regex, or a group with no matching field;
+- `schemaVersion` ≠ 1, an `id` that is not a known contest id, duplicate field keys.
 
 ## 5. Expression language
 
 - Literals: numbers, strings, booleans, lists.
 - Operators: `+ - * / %`, `== != < <= > >=`, `and or not`, `?:`, `in`.
 - Identifiers resolve to exchange fields, station properties, or constants.
-- Built-ins (v1): `upper/lower/len/substr`, `matches(str, regex)`, `num(str)`,
-  `callPrefix(call)`, `callZone(call)`, `callCountry(call)`, `arrlSectionOf(call)`,
+- Built-ins (v1): `upper/lower/len/substr`, `matches(str, regex)`, `num(str)`, `str(x)`,
+  `callPrefix(call)`, `callZone(call)`, `callCountry(call)`, `callContinent(call)`,
+  `arrlSectionOf(call)`, `indexOf(list, value)`, `listAt(list, index)`,
   `unique(list)`, `count(list)`, `sum(list)`, `ifElse(cond, a, b)`.
 - **No** loops, assignment, I/O or reflection. Evaluation carries a step budget (default 10 000)
   and fails closed with a typed error.
-- Errors are user-visible in the contest editor: `line:col — message`.
+- **No randomness.** Dice are inputs: the config declares them (`their.dice`) and the runtime
+  supplies seeded draws, so evaluation stays deterministic (ADR-0004).
+- Errors are user-visible in the contest editor: `line:col — message`. Compilation also
+  answers `identifiers()`, so the loader checks every name against the §4 environment table.
+- A new built-in is an explicit extension point: spec edit + ADR-0003 conformance + tests.
+  Four were added by the T3 pressure test (`str`, `indexOf`, `listAt`, `callContinent`).
 
 ## 6. Runtime
 

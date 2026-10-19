@@ -3,8 +3,10 @@ package com.bh4gzk.morserunner.contest
 /**
  * Registry of contest definitions.
  *
- * T1: only knows the identity of the 12 bundled contests; loading and validating the
- * JSON documents arrives with T3 (ADR-0002, ADR-0003).
+ * T1: only knows the identity of the 12 bundled contests.
+ * T3: the documents themselves are loaded and validated by [ContestLibrary]
+ * (ADR-0002, ADR-0004). This list stays the authority on *which* ids exist, so a
+ * config cannot invent a thirteenth contest by naming itself.
  */
 object ContestRegistry {
 

@@ -1,9 +1,12 @@
 # ADR-0004 — Schema v1 and four language extension points, after the pressure test
 
-- Status: **accepted by delegation** — the human delegated decision-making on 2026-10-19
-  ("不需要我同意，你们爱怎么做怎么做" / "如果有选择题，自动选最优解"), so the agent decides and
-  records the reasoning here instead of waiting for review. T3's exit evidence still has to
-  prove the three contests load, validate and score; until then spec §4 stays provisional.
+- Status: **accepted by delegation, and settled by evidence** — the human delegated
+  decision-making on 2026-10-19 ("不需要我同意，你们爱怎么做怎么做" / "如果有选择题，自动选最优解"),
+  so the agent decides and records the reasoning here instead of waiting for review.
+  T3's exit evidence now exists (`feat(T3)` commit): `:core-contest:test` → exit 0, 61 tests /
+  0 failures, of which `PressureTestTest` runs the shipped CQ WW / ARRL SS / IARU HF configs
+  through the evaluator and compares the answers with the Pascal; full `assembleDebug test`
+  → exit 0. Spec §4 is therefore no longer provisional.
 - Deciders: agent, under that delegation. An earlier draft recorded the human as a decider
   before they had seen the file; that was wrong and is corrected.
 - Scope note: revising the schema during T3 is pre-authorised by spec §4:94-96 ("If a contest
@@ -65,6 +68,14 @@ v1 did not cover: continent lookup and number→string formatting.
   extension point ADR-0003 asked for — the count is now four (`str`, `indexOf`, `listAt`,
   `callContinent`), and each one is total and fail-closed.
 − Config authors must respect the §4 environment table; the loader enforces it.
+− **Open, deliberately not decided here:** decision 4 puts the ARRL section table in
+  `arrlss.json` (`constants.arrlSections`), but `core-data.ArrlSections.all` ships the same
+  85 entries plus `neighbourOf(section, roll)` — the two are separate sources of truth. They
+  agree today (checked entry by entry when T3 landed), and nothing enforces that they keep
+  agreeing. T5, which wires `CallFacts` to `core-data`, must pick one: either the schema
+  gains a "constant that names a shared data asset", or the loader cross-checks the
+  constant against the asset. Recorded in `.scratch/progress.md` as T3 debt; not silently
+  resolved during T3 because it is a schema decision, not a pressure-test one.
 
 ## Rejected
 - A contest-specific `arrlSectionNeighbour()` built-in: puts domain logic in the engine and

@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "id": "cqww",
+  "name": "CQ World Wide DX CW",
+  "duration": { "default": 30, "min": 1, "max": 60 },
+  "runModes": ["single-call", "pile-up"],
+  "constants": {},
+  "exchange": {
+    "myFields": [
+      { "key": "rst", "type": "rst", "label": "RST", "send": "5NN" },
+      { "key": "zone", "type": "int", "label": "CQ Zone", "range": [1, 40] }
+    ],
+    "their": {
+      "dice": ["leadingZero"],
+      "bindings": {
+        "hisZone": { "source": "history", "column": "zone" }
+      },
+      "exch1": "'599'",
+      "exch2": "ifElse(num(hisZone) < 9 and leadingZero < 0.05, '0' + hisZone, hisZone)"
+    }
+  },
+  "validation": [
+    { "field": "zone", "when": "not (zone >= 1 and zone <= 40)", "error": "Invalid CQ zone" },
+    { "field": "rst", "when": "not matches(rst, '^[1-5][0-9]{2}$')", "error": "RST must be three digits" }
+  ],
+  "scoring": {
+    "points": "ifElse(matches(theirCall, '/MM$'), 0, ifElse(callCountry(theirCall) == myCountry, 0, ifElse(callContinent(theirCall) != myContinent, 3, ifElse(callContinent(theirCall) == 'NA', 2, 1))))",
+    "multipliers": [
+      { "key": "'ZN-' + str(num(theirExch2))" },
+      {
+        "key": "ifElse(callCountry(theirCall) == 'Alaska' or callCountry(theirCall) == 'Hawaii', 'United States of America', callCountry(theirCall))",
+        "when": "not matches(theirCall, '/MM$')"
+      }
+    ]
+  },
+  "callHistory": {
+    "asset": "CQWWCW.TXT",
+    "delimiter": ",",
+    "skipPrefixes": ["!!Order!!", "#"],
+    "minFields": 3,
+    "columns": [
+      { "name": "call", "index": 0, "type": "callsign", "required": true },
+      { "name": "zone", "index": 1, "type": "digits", "required": true },
+      { "name": "userText", "index": 2, "type": "text" }
+    ],
+    "dedupe": false,
+    "requiresMyCallInDxcc": false
+  },
+  "station": {
+    "callPool": "MASTER.DTA",
+    "speedRange": { "min": "speed - 5", "max": "speed + 10" },
+    "exchangeDefaults": { "rst": "599" }
+  },
+  "messages": {},
+  "capabilities": { "farnsworth": false, "requiresMyDxcc": false }
+}

@@ -184,6 +184,7 @@ internal class Evaluator(
         "substr" -> substring(node, arguments)
         "matches" -> matches(node, arguments)
         "num" -> number(node, arguments)
+        "str" -> Value.Str(numberToText(requireNumber(arguments[0], node.arguments[0].position)))
         "callPrefix" -> {
             val call = requireString(arguments[0], node.arguments[0].position)
             Value.Str(
@@ -213,6 +214,16 @@ internal class Evaluator(
                 ),
             )
         }
+        "callContinent" -> {
+            val call = requireString(arguments[0], node.arguments[0].position)
+            Value.Str(
+                calls.continent(call) ?: fail(
+                    node.arguments[0].position,
+                    ErrorKind.CALL_DATA_MISSING,
+                    "callContinent: no DXCC data is available for '$call'",
+                ),
+            )
+        }
         "arrlSectionOf" -> {
             val call = requireString(arguments[0], node.arguments[0].position)
             Value.Str(
@@ -233,6 +244,8 @@ internal class Evaluator(
             Value.List(unique.toList())
         }
         "count" -> Value.Num(requireList(arguments[0], node.arguments[0].position).items.size.toDouble())
+        "indexOf" -> indexOf(node, arguments)
+        "listAt" -> listAt(node, arguments)
         "sum" -> {
             val list = requireList(arguments[0], node.arguments[0].position)
             charge(list.items.size, node.position)
@@ -289,6 +302,42 @@ internal class Evaluator(
             fail(node.arguments[0].position, ErrorKind.BAD_ARGUMENT, "num: '$text' is not a number")
         }
         return Value.Num(parsed)
+    }
+
+    /**
+     * Text form of a number (ADR-0004). An integral value prints without a
+     * fractional part — `3` → `"3"`, `7 + 2` → `"9"` — because every use in a
+     * contest config is a zone, serial, check or points count. Values beyond
+     * 2^53 keep the double form: an integral double that large has no exact
+     * integer text, so inventing digits would be a lie.
+     */
+    private fun numberToText(value: Double): String =
+        if (value % 1.0 == 0.0 && kotlin.math.abs(value) <= 9_007_199_254_740_992.0) {
+            value.toLong().toString()
+        } else {
+            value.toString()
+        }
+
+    private fun indexOf(node: Node.Call, arguments: List<Value>): Value {
+        val list = requireList(arguments[0], node.arguments[0].position)
+        // Charge every element, not just the ones visited: a match at index 0 must
+        // not make an arbitrarily long list free.
+        charge(list.items.size, node.position)
+        val index = list.items.indexOf(arguments[1])
+        return Value.Num(if (index >= 0) index.toDouble() else -1.0)
+    }
+
+    private fun listAt(node: Node.Call, arguments: List<Value>): Value {
+        val list = requireList(arguments[0], node.arguments[0].position)
+        val index = requireInteger(arguments[1], node.arguments[1].position, "listAt index")
+        if (index < 0 || index >= list.items.size) {
+            fail(
+                node.arguments[1].position,
+                ErrorKind.BAD_ARGUMENT,
+                "listAt index $index is outside a list of ${list.items.size}",
+            )
+        }
+        return list.items[index]
     }
 
     // --- typed accessors ------------------------------------------------------

@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "id": "arrlss",
+  "name": "ARRL Sweepstakes CW",
+  "duration": { "default": 30, "min": 1, "max": 60 },
+  "runModes": ["single-call", "pile-up"],
+  "constants": {
+    "arrlSections": [
+      "CO", "IA", "KS", "MN", "MO", "ND", "NE", "SD",
+      "CT", "EMA", "ME", "NH", "RI", "VT", "WMA",
+      "ENY", "NLI", "NNJ", "NNY", "SNJ", "WNY",
+      "DE", "EPA", "MDC", "WPA",
+      "AL", "GA", "KY", "NC", "NFL", "SC", "SFL", "TN", "VA", "WCF", "PR", "VI",
+      "AR", "LA", "MS", "NM", "NTX", "OK", "STX", "WTX",
+      "EB", "LAX", "ORG", "SB", "SCV", "SDG", "SF", "SJV", "SV", "PAC",
+      "AK", "AZ", "EWA", "ID", "MT", "NV", "OR", "UT", "WWA", "WY",
+      "MI", "OH", "WV",
+      "IL", "IN", "WI",
+      "AB", "BC", "GH", "MB", "NB", "NL", "NS", "ONE", "ONN", "ONS", "PE", "QC", "SK", "TER"
+    ]
+  },
+  "exchange": {
+    "myFields": [
+      { "key": "nr", "type": "serial", "label": "Serial", "range": [1, 999] },
+      { "key": "prec", "type": "enum", "label": "Precedence", "values": ["A", "B", "Q", "M", "U"] },
+      { "key": "check", "type": "check", "label": "Check", "range": [0, 99] },
+      { "key": "section", "type": "enum", "label": "Section", "valuesRef": "arrlSections" }
+    ],
+    "entryParse": {
+      "pattern": "^ *(?<nr>[0-9]+|#)? *(?<prec>[QABUMS]) +(?<check>[0-9]{2}) +(?<section>[A-Z]{2,3}) *$"
+    },
+    "sent": {
+      "exch1": "str(nr) + ' ' + prec",
+      "exch2": "ifElse(check < 10, '0' + str(check), str(check)) + ' ' + section"
+    },
+    "their": {
+      "dice": ["precRoll", "restRoll", "checkRoll", "deltaRoll", "sectRoll", "sideRoll"],
+      "bindings": {
+        "hisCheck": { "source": "history", "column": "check" },
+        "hisSection": { "source": "history", "column": "section" },
+        "hisSer": { "source": "serial" }
+      },
+      "derive": {
+        "prec": "ifElse(precRoll < 0.43, 'A', ifElse(precRoll < 0.62, 'B', ifElse(precRoll < 0.90, 'U', ifElse(restRoll < 0.34, 'Q', ifElse(restRoll < 0.67, 'M', 'S')))))",
+        "check": "ifElse(checkRoll < 0.10, (num(hisCheck) + ifElse(deltaRoll < 0.5, 1, 99)) % 100, num(hisCheck))",
+        "section": "ifElse(indexOf(arrlSections, hisSection) < 0, hisSection, ifElse(sectRoll < 0.10, ifElse((sideRoll < 0.5 and indexOf(arrlSections, hisSection) > 0) or indexOf(arrlSections, hisSection) == count(arrlSections) - 1, listAt(arrlSections, indexOf(arrlSections, hisSection) - 1), listAt(arrlSections, indexOf(arrlSections, hisSection) + 1)), hisSection))"
+      },
+      "parse": {
+        "pattern": "^(?<chk>[0-9]{2}) (?<sect>[A-Z]{2,3})$"
+      },
+      "exch1": "str(hisSer) + ' ' + prec",
+      "exch2": "ifElse(check < 10, '0' + str(check), str(check)) + ' ' + section"
+    }
+  },
+  "validation": [
+    { "field": "section", "when": "not (section in arrlSections)", "error": "Unknown ARRL section" },
+    { "field": "check", "when": "not (check >= 0 and check <= 99)", "error": "Check must be two digits" },
+    { "field": "nr", "when": "not (nr >= 1 and nr <= 999)", "error": "Serial must be 1-999" }
+  ],
+  "scoring": {
+    "points": "2",
+    "multipliers": [
+      { "key": "theirSect" }
+    ]
+  },
+  "callHistory": {
+    "asset": "SSCW.TXT",
+    "delimiter": ",",
+    "skipPrefixes": ["!!Order!!"],
+    "minFields": 4,
+    "columns": [
+      { "name": "call", "index": 0, "type": "callsign", "required": true },
+      { "name": "section", "index": 1, "type": "text", "required": true },
+      { "name": "ignored", "index": 2, "type": "text" },
+      { "name": "check", "index": 3, "type": "integer", "required": true },
+      { "name": "userText", "index": 4, "type": "text" }
+    ],
+    "dedupe": false,
+    "requiresMyCallInDxcc": false
+  },
+  "station": {
+    "callPool": "MASTER.DTA",
+    "speedRange": { "min": "speed - 5", "max": "speed + 10" },
+    "exchangeDefaults": {}
+  },
+  "messages": {
+    "CQ": "CQ SS <my>",
+    "longCQ": "CQ CQ SS <my> <my> SS"
+  },
+  "capabilities": { "farnsworth": false, "requiresMyDxcc": false }
+}
