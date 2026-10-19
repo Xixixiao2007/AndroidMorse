@@ -28,10 +28,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.bh4gzk.morserunner.audio.Receiver
+import com.bh4gzk.morserunner.contest.ContestLibrary
 import com.bh4gzk.morserunner.settings.SessionSettings
 
 /**
@@ -63,6 +65,7 @@ fun SettingsDialog(
     onSave: (SessionSettings) -> Unit,
     onRestart: (SessionSettings) -> Unit,
     onDismiss: () -> Unit,
+    contests: List<ContestLibrary.Entry> = ContestLibrary.catalog(),
 ) {
     var draft by remember { mutableStateOf(settings.normalized()) }
 
@@ -81,6 +84,14 @@ fun SettingsDialog(
                     modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    // T10: the contest the next session starts. Same "next session" rule as the
+                    // numbers below, so it lives with them; the picker is a step-through row
+                    // because the dialog already scrolls on a short window.
+                    ContestPicker(
+                        contests = contests,
+                        selectedId = draft.contestId,
+                        onSelect = { draft = draft.copy(contestId = it) },
+                    )
                     Stepper(
                         label = "时长",
                         value = "${draft.durationMinutes} 分",
@@ -194,6 +205,45 @@ fun SettingsDialog(
                     TextButton(onClick = { onRestart(draft) }) { Text("重开一局") }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The contest the next session starts (T10): one row, stepped with `‹` / `›` through the
+ * documents this build ships, in manifest order.
+ *
+ * A step-through row rather than a dropdown: the dialog is already a scrolling column on WSA's
+ * 540 dp window, and a popup is one more thing that can be clipped. [contests] is the loaded
+ * manifest (`ContestLibrary.catalog`), so a contest that cannot be loaded is never offered.
+ */
+@Composable
+private fun ContestPicker(
+    contests: List<ContestLibrary.Entry>,
+    selectedId: String,
+    onSelect: (String) -> Unit,
+) {
+    val options = contests.ifEmpty { listOf(ContestLibrary.Entry(selectedId, selectedId)) }
+    val index = options.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
+    val selected = options[index]
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text("比赛", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        TextButton(onClick = { onSelect(options[(index - 1 + options.size) % options.size].id) }) {
+            Text("‹")
+        }
+        Text(
+            selected.name,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(min = 120.dp),
+        )
+        TextButton(onClick = { onSelect(options[(index + 1) % options.size].id) }) {
+            Text("›")
         }
     }
 }

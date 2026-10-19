@@ -1,6 +1,7 @@
 package com.bh4gzk.morserunner.settings
 
 import com.bh4gzk.morserunner.audio.Receiver
+import com.bh4gzk.morserunner.contest.ContestLibrary
 
 /**
  * Everything the operator can configure (spec §11 T9), and nothing else.
@@ -26,6 +27,9 @@ import com.bh4gzk.morserunner.audio.Receiver
  * @param flutter the fast fade on 30 % of stations — upstream `Ini.Flutter`.
  * @param lids whether 10 % of stations are LIDs — upstream `Ini.Lids`.
  * @param myCall the operator's callsign — upstream `Ini.Call`; T7's placeholder was `W1AW`.
+ * @param contestId the contest the next session starts (T10) — an id this build ships, or
+ *   [ContestLibrary.DEFAULT_ID] when the stored/id value is unknown. It acts like duration and
+ *   speed: on `重开一局`, never on a running contest (ADR-0010 §6).
  */
 data class SessionSettings(
     val durationMinutes: Int = DEFAULT_DURATION_MINUTES,
@@ -38,6 +42,7 @@ data class SessionSettings(
     val flutter: Boolean = true,
     val lids: Boolean = true,
     val myCall: String = DEFAULT_MY_CALL,
+    val contestId: String = ContestLibrary.DEFAULT_ID,
 ) {
 
     /**
@@ -58,6 +63,7 @@ data class SessionSettings(
         flutter = flutter,
         lids = lids,
         myCall = normalizeCall(myCall),
+        contestId = ContestLibrary.normalizeId(contestId),
     )
 
     companion object {

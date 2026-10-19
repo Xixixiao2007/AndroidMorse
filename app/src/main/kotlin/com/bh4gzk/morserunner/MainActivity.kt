@@ -19,12 +19,11 @@ import com.bh4gzk.morserunner.audio.SessionAudio
 import com.bh4gzk.morserunner.audio.StationAudio
 import com.bh4gzk.morserunner.data.StationAssets
 import com.bh4gzk.morserunner.data.StationData
-import com.bh4gzk.morserunner.qso.QsoEntry
-import com.bh4gzk.morserunner.qso.QsoLog
 import com.bh4gzk.morserunner.session.SessionBootstrap
+import com.bh4gzk.morserunner.session.SessionPlan
+import com.bh4gzk.morserunner.session.SessionPlanner
 import com.bh4gzk.morserunner.settings.PrefsStringStore
 import com.bh4gzk.morserunner.settings.SessionPersistence
-import com.bh4gzk.morserunner.settings.SessionSettings
 import com.bh4gzk.morserunner.settings.SessionStore
 import com.bh4gzk.morserunner.settings.SettingsStore
 import com.bh4gzk.morserunner.ui.SessionRoot
@@ -62,14 +61,14 @@ class MainActivity : ComponentActivity() {
         val now = System.currentTimeMillis()
         val data = StationAssets.load(assets)
 
-        var plan = plan(settingsStore, sessionStore, now)
+        var plan = SessionPlanner.plan(settingsStore, sessionStore, now)
         val bootstrap = try {
             build(plan, data)
         } catch (failure: RuntimeException) {
             // A snapshot naming a contest this build cannot load (an older or newer build's save)
             // must not crash-loop the app: drop it and start a fresh contest instead.
             sessionStore.clear()
-            plan = fresh(settingsStore, now)
+            plan = SessionPlanner.fresh(settingsStore, now)
             build(plan, data)
         }
 
@@ -144,47 +143,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Which contest to put on screen, and everything a resume needs. */
-    private data class SessionPlan(
-        val contestId: String,
-        val settings: SessionSettings,
-        val seed: Long,
-        val startMs: Long,
-        val log: QsoLog,
-        val entry: QsoEntry?,
-    )
-
-    /** A stored contest that still has time left, or a fresh one with the saved settings. */
-    private fun plan(settingsStore: SettingsStore, sessionStore: SessionStore, now: Long): SessionPlan {
-        val saved = sessionStore.read()
-        val resume = saved?.takeIf { it.isResumable(now) }
-        if (saved != null && resume == null) {
-            // A finished contest must not be resumed tomorrow as a fresh one.
-            sessionStore.clear()
-        }
-        if (resume == null) return fresh(settingsStore, now)
-
-        // A resumed contest keeps the settings it was started with, not whatever was saved
-        // afterwards: changing the speed must not silently rewrite a running session.
-        return SessionPlan(
-            contestId = resume.contestId,
-            settings = resume.settings,
-            seed = resume.seed,
-            startMs = resume.startMs,
-            log = QsoLog().also { log -> resume.records.forEach { log.record(it) } },
-            entry = resume.entry,
-        )
-    }
-
-    private fun fresh(settingsStore: SettingsStore, now: Long) = SessionPlan(
-        contestId = SessionBootstrap.DEFAULT_CONTEST,
-        settings = settingsStore.load(),
-        seed = now,
-        startMs = now,
-        log = QsoLog(),
-        entry = null,
-    )
-
+    /** Builds the controller for [plan]; the plan itself is [SessionPlanner]'s (JVM-tested). */
     private fun build(plan: SessionPlan, data: StationData): SessionBootstrap.Result =
         SessionBootstrap.create(
             assets = assets,

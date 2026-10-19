@@ -24,6 +24,7 @@ object SettingsCodec {
     internal const val KEY_FLUTTER = "flutter"
     internal const val KEY_LIDS = "lids"
     internal const val KEY_CALL = "call"
+    internal const val KEY_CONTEST = "contest"
 
     /** The settings as the stored blob. */
     fun encode(settings: SessionSettings): String {
@@ -39,6 +40,7 @@ object SettingsCodec {
             add(EncodedText.line(KEY_FLUTTER, legal.flutter.toString()))
             add(EncodedText.line(KEY_LIDS, legal.lids.toString()))
             add(EncodedText.line(KEY_CALL, legal.myCall))
+            add(EncodedText.line(KEY_CONTEST, legal.contestId))
         }.joinToString("\n")
     }
 
@@ -61,6 +63,8 @@ object SettingsCodec {
             flutter = bool(values, KEY_FLUTTER, defaults.flutter),
             lids = bool(values, KEY_LIDS, defaults.lids),
             myCall = values[KEY_CALL] ?: defaults.myCall,
+            // An id from a build that shipped another contest falls back inside `normalized()`.
+            contestId = values[KEY_CONTEST]?.takeIf { it.isNotBlank() } ?: defaults.contestId,
         ).normalized()
     }
 

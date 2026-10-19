@@ -2,7 +2,9 @@ package com.bh4gzk.morserunner
 
 import com.bh4gzk.morserunner.audio.CwMixer
 import com.bh4gzk.morserunner.audio.StationAudio
+import com.bh4gzk.morserunner.contest.CallHistoryFile
 import com.bh4gzk.morserunner.contest.ContestLibrary
+import com.bh4gzk.morserunner.contest.HistoryLoad
 import com.bh4gzk.morserunner.contest.LoadResult
 import com.bh4gzk.morserunner.contest.RosterSettings
 import com.bh4gzk.morserunner.contest.StationRoster
@@ -15,6 +17,7 @@ import kotlin.math.cos
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -54,6 +57,48 @@ class PackagedAssetsTest {
         )
         assertTrue(data.pool.size in 40_000..60_000, "unexpected pool size ${data.pool.size}")
         assertTrue(data.pool.contains(data.pool.callAt(0)))
+    }
+
+    @Test
+    fun `the packaged NAQP history drives a real roster`() {
+        // T10: the first per-contest ticket. The file is upstream's `NAQPCW.txt`, copied
+        // unmodified (MPL-2.0, spec §9), and this is the whole chain the device uses:
+        // packaged bytes → the config's own callHistory spec → the roster's exchange.
+        val bundled = ContestLibrary.bundled()
+        assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
+        val config = bundled.configs.firstOrNull { it.id == "naqp" }
+        assertNotNull(config, "no bundled naqp config")
+
+        val text = File(assetsDir, config.callHistory.asset).readText()
+        val history = assertIs<HistoryLoad.Loaded>(
+            CallHistoryFile.parse(text, config.callHistory, "W1AW", data.callFacts),
+        ).history
+        assertTrue(history.size in 8_000..9_272, "unexpected NAQP history size ${history.size}")
+        assertEquals("ERIC", history.recordFor("KP4NZ")?.get("name"))
+        // A DX row keeps its empty state; the station sends its name only.
+        assertEquals("", history.recordFor("6Y5PW")?.get("state"))
+
+        // The NAQP multiplier expression asks `callContinent`/`callCountry` about the worked
+        // call, and the engine fails closed when the DXCC table cannot answer. Every call the
+        // shipped file can give us must resolve, or a contact would score 0 instead of 1.
+        val unknown = history.calls.filter { data.callFacts.continent(it) == null }
+        assertTrue(unknown.isEmpty(), "calls with no DXCC record: ${unknown.take(10)} (${unknown.size})")
+
+        val roster = StationRoster(
+            config = config,
+            pool = history,
+            history = history,
+            settings = RosterSettings(speedWpm = 25),
+            seed = 20_261_020L,
+            calls = data.callFacts,
+        )
+        repeat(StationRoster.MAX_STATIONS) { roster.add() }
+        assertEquals(StationRoster.MAX_STATIONS, roster.size)
+        roster.stations.forEach { station ->
+            val record = assertNotNull(history.recordFor(station.call), station.call)
+            assertEquals(record["name"].orEmpty().uppercase(), station.exchange.exch1, station.call)
+            assertEquals(record["state"].orEmpty().uppercase(), station.exchange.exch2, station.call)
+        }
     }
 
     @Test

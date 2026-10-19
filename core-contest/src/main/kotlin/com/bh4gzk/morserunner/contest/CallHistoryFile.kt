@@ -32,6 +32,12 @@ sealed interface HistoryLoad {
  * [Callsign.normalise]. With `dedupe = false` a later row replaces an earlier one
  * (a plain map put); with `dedupe = true` the first row wins, as upstream's
  * `dupList` does.
+ *
+ * **An existing empty cell is a value for a non-required TEXT column** (T10): NAQP's DX
+ * records carry an empty state (`NaQp.pas:125`) and the station sends its name only, so the
+ * record has to keep `state = ""`. A row that does not have the cell at all still yields no
+ * column, a required column still rejects an empty value, and non-TEXT columns keep skipping
+ * empties — otherwise IARU HF's empty sections would start passing its required-column gate.
  */
 class CallHistoryFile private constructor(
     private val records: Map<String, Map<String, String>>,
@@ -166,6 +172,10 @@ class CallHistoryFile private constructor(
                 }
                 if (value.isEmpty() || !isValid(column.type, value)) {
                     if (column.required) return null
+                    // The cell exists and is empty: for TEXT that is a value (NAQP's DX
+                    // station sends no state, `NaQp.pas:125`). A shorter row has no cell at
+                    // all, and keeps having no column.
+                    if (raw != null && column.type == ColumnType.TEXT) record[column.name] = ""
                     continue
                 }
                 record[column.name] = value

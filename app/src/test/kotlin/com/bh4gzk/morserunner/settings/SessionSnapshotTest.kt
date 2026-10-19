@@ -5,6 +5,7 @@ import com.bh4gzk.morserunner.qso.QsoError
 import com.bh4gzk.morserunner.qso.QsoRecord
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -128,5 +129,29 @@ class SessionSnapshotTest {
 
         store.clear()
         assertNull(store.read(), "a cleared session must not come back")
+    }
+
+    @Test
+    fun `the snapshot keeps the contest, both as its identity and in its settings`() {
+        // T10: the session's contest is what a resume rebuilds, and the settings the session was
+        // started with carry it too (they are the snapshot's `set.*` lines).
+        val original = snapshot().copy(
+            contestId = "naqp",
+            settings = settings.copy(contestId = "naqp"),
+        )
+        val decoded = assertNotNull(SessionSnapshotCodec.decode(SessionSnapshotCodec.encode(original)))
+        assertEquals("naqp", decoded.contestId, "the identity field a resume builds from")
+        assertEquals("naqp", decoded.settings.contestId, "the settings the session was started with")
+        assertEquals(original, decoded)
+    }
+
+    @Test
+    fun `a snapshot whose settings contest is not shipped still decodes to the identity`() {
+        // A blob written by hand or by a build that shipped a later contest: the identity field
+        // is the authority, and the settings blob falls back through the normal normalisation.
+        val original = snapshot().copy(contestId = "naqp", settings = settings.copy(contestId = "arrlfd"))
+        val decoded = assertNotNull(SessionSnapshotCodec.decode(SessionSnapshotCodec.encode(original)))
+        assertEquals("naqp", decoded.contestId)
+        assertEquals("cqww", decoded.settings.contestId)
     }
 }

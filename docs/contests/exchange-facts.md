@@ -99,3 +99,34 @@ scoring switches on “is this numeric”, which the expression language needs a
   ADR-0003 forbids; the seeded value must be supplied by the runtime, not by the expression.
 - `IsNum` (`IaruHf.pas:355-366`) must exist as a numeric test in the language (or be expressible
   as `matches(s, "^[0-9]+$")` — verify before adding a built-in).
+
+---
+
+## NCJ NAQP — `NaQp.pas` (T10, the first per-contest ticket)
+
+| | |
+|---|---|
+| call history | `NAQPCW.txt` (15 467 lines), comma, **no header** (`!!Order!!` is a skip prefix, `:98-99`); columns `call,name,state[,usertext]`; `tl.Count > 2` (`:114`); empty call/name dropped (`:122-123`); name > 12 dropped (`:124`); **state may be empty** (DX, `:125`); no dedupe, no DXCC gate (`OnSetMyCall` only warns, `:178-210`) |
+| my exchange | one *name* box and one *state* box (`Ini.pas:129-136`: `<name> [<state\|prov\|dxcc-entity>]`); the default exchange string is `ALEX ON` (`Ini.pas:133`); name `[A-Z][A-Z]*` ≤ 10, state `[0-9A-Z/]*` ≤ 6 (`ExchFields.pas:45,66`) |
+| DX Exch1 | the history's `Name`, verbatim (`:439-442`) |
+| DX Exch2 | the history's `State`, verbatim — **empty for a DX station**, which then sends its name only (`:215-216`, `:445-448`) |
+| realism quirks | none; the station's file values are sent (`NaQp.pas` has no corruption) |
+| points | constant 1 (`:397`) |
+| multiplier | `Exch2` when the call is local (`continent == 'NA' or entity == 'Hawaii'`, `:400-421`); a DX station contributes none |
+| messages | none overridden (base wording) |
+| capability flags | no Farnsworth; no DXCC-required |
+| verdict labels | name mismatch `leNAME` (`Log.pas:860`); state mismatch `leST` (`Log.pas:944`), and `DX` is accepted for an empty second piece (`:945-949`) |
+
+Implemented in `contests/naqp.json` (ADR-0010); `NAQPCW.txt` is packaged unmodified.
+
+### Data inventory for the remaining per-contest tickets (verified 2026-10-20)
+
+| Asset | Used by | State |
+|---|---|---|
+| `CQWWCW.txt` / `SSCW.txt` / `IARU_HF.txt` | CQ WW / ARRL SS / IARU HF | packaged (T3/T6) |
+| `NAQPCW.txt` | NCJ NAQP | packaged (T10) |
+| `ARRLDXCW_USDX.txt` | ARRL DX (`ArrlDx.pas`) | **not packaged** — needs the my-exchange branch (§1 of ADR-0010) |
+| `K1USNSST.txt` (15 045 lines, `call,name,state/usertext`) | K1USN SST (`CWSST.pas`) | **not packaged** — name + QTH, no serial; multiplier is `Exch2`, or the DXCC entity when `Exch2 == 'DX'` (`CWSST.pas:315-330`); `BFarnsworthEnabled := true` (`:120`) and `CQ SST <my>` (`:190`) — the first contest to exercise those two flags |
+| `FDGOTA.txt` | nothing (`grep` finds no Pascal reference) | unused reference data |
+| `HstResults.txt` | `Main.pas` (HST results import) | empty file; HST also needs the serial fix (F8) |
+| — | CQ WPX, CWops CWT, ARRL FD, ALL JA, ACAG | no history → `MASTER.DTA` + placeholder exchange; WPX/HST/SPRINT-style contests need F8 first |

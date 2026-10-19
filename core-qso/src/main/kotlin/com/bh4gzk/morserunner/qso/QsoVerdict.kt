@@ -20,12 +20,18 @@ enum class QsoError(val label: String) {
 
     Rst("RST"),
 
+    /** The operator's name (NAQP, CWT, SST; `Log.pas:860` `leNAME`). */
+    Name("NAME"),
+
     /** A serial number (or an untyped number) is wrong. */
     Number("NR"),
 
     Zone("ZN"),
 
     Section("SEC"),
+
+    /** A state, province or DXCC prefix (NAQP; `Log.pas:944` `leST`). */
+    State("ST"),
 
     Check("CHK"),
 

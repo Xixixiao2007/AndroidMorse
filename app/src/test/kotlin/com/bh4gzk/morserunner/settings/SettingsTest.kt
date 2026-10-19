@@ -1,6 +1,7 @@
 package com.bh4gzk.morserunner.settings
 
 import com.bh4gzk.morserunner.audio.Receiver
+import com.bh4gzk.morserunner.contest.ContestLibrary
 import com.bh4gzk.morserunner.session.SessionController
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -180,5 +181,38 @@ class SettingsTest {
         // One write, not one per key: the store is a single blob so a torn write cannot leave
         // half the settings behind.
         assertEquals(1, store.writes)
+    }
+
+    // --- the contest (T10) ------------------------------------------------------------
+
+    @Test
+    fun `the contest defaults to CQ WW and an unknown id falls back to it`() {
+        // Milestone A's contest (spec §11); a settings blob from a build that shipped a contest
+        // this one does not must not make the app unstartable.
+        assertEquals(ContestLibrary.DEFAULT_ID, SessionSettings.DEFAULT.contestId)
+        assertEquals("cqww", SessionSettings.DEFAULT.contestId)
+        assertEquals("cqww", SessionSettings(contestId = "no-such-contest").normalized().contestId)
+        assertEquals("cqww", SessionSettings(contestId = "").normalized().contestId)
+        // A registered upstream id whose document this build does not ship yet is not selectable
+        // either: the manifest, not the twelve-name registry, is what can actually be started.
+        assertEquals("cqww", SessionSettings(contestId = "arrlfd").normalized().contestId)
+    }
+
+    @Test
+    fun `a shipped contest id is kept and can be started`() {
+        val chosen = SessionSettings(contestId = "naqp").normalized()
+        assertEquals("naqp", chosen.contestId)
+        assertTrue(ContestLibrary.isAvailable(chosen.contestId), "the picker only offers loadable contests")
+        assertTrue(ContestLibrary.catalog().any { it.id == "naqp" && it.name == "NCJ NAQP" })
+    }
+
+    @Test
+    fun `the contest survives an encode and decode, and a stale stored id falls back`() {
+        val chosen = SessionSettings(contestId = "naqp", speedWpm = 33)
+        assertEquals(chosen, SettingsCodec.decode(SettingsCodec.encode(chosen)))
+
+        // A blob written by an older build, or by hand, cannot select a missing document.
+        assertEquals("cqww", SettingsCodec.decode("contest=arrlfd").contestId)
+        assertEquals("cqww", SettingsCodec.decode("contest=").contestId)
     }
 }

@@ -290,7 +290,13 @@ class ContestRules(
                     canonical(typed) == canonical(truth)
                 }
             }
-            FieldType.ENUM, FieldType.TEXT -> canonical(typed) == canonical(truth)
+            FieldType.ENUM, FieldType.TEXT -> {
+                // A non-NA station sends no location, and upstream lets the operator log `DX`
+                // in the second box (`Log.pas:945-949`, `etNaQpNonNaExch2`). The rule only
+                // fires for an empty truth, so no other text field changes meaning.
+                canonical(typed) == canonical(truth) ||
+                    (truth.isBlank() && canonical(typed) == "DX")
+            }
         }
 
     /** Upstream's digit/letter confusion table (`Main.pas:608-620`, `Log.pas:565-575`). */
@@ -315,7 +321,14 @@ class ContestRules(
         FieldType.CHECK -> QsoError.Check
         FieldType.INT -> if ("zone" in field.key || field.key == "zn") QsoError.Zone else QsoError.Number
         FieldType.ENUM -> if ("sect" in field.key) QsoError.Section else QsoError.Precedence
-        FieldType.TEXT -> if ("itu" in field.key || "soc" in field.key) QsoError.Qth else QsoError.Err
+        FieldType.TEXT -> when {
+            // NAQP labels its two text fields the way upstream does (`Log.pas:860,944`);
+            // the field key is the config's own name, so this is naming, not a new rule.
+            field.key == "name" -> QsoError.Name
+            field.key == "state" -> QsoError.State
+            "itu" in field.key || "soc" in field.key -> QsoError.Qth
+            else -> QsoError.Err
+        }
     }
 
     private fun mapOfNotNull(vararg pairs: Pair<String?, String>): Map<String, String> =

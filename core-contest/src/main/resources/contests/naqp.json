@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "naqp",
+  "name": "NCJ NAQP",
+  "duration": { "default": 30, "min": 1, "max": 720 },
+  "runModes": ["single-call", "pile-up"],
+  "constants": {},
+  "exchange": {
+    "myFields": [
+      { "key": "name", "type": "text", "label": "Name" },
+      { "key": "state", "type": "text", "label": "State/Prov" }
+    ],
+    "their": {
+      "dice": [],
+      "bindings": {
+        "hisName": { "source": "history", "column": "name" },
+        "hisState": { "source": "history", "column": "state" }
+      },
+      "exch1": "upper(hisName)",
+      "exch2": "upper(hisState)"
+    }
+  },
+  "validation": [
+    { "field": "name", "when": "not matches(upper(name), '^[A-Z][A-Z]*$') or len(name) > 10", "error": "Name must be letters, up to 10" },
+    { "field": "state", "when": "len(state) > 6 or not matches(upper(state), '^[0-9A-Z/]*$')", "error": "State/Prov must be up to 6 characters" }
+  ],
+  "scoring": {
+    "points": "1",
+    "multipliers": [
+      {
+        "key": "theirExch2",
+        "when": "callContinent(theirCall) == 'NA' or callCountry(theirCall) == 'Hawaii'"
+      }
+    ]
+  },
+  "callHistory": {
+    "asset": "NAQPCW.txt",
+    "delimiter": ",",
+    "skipPrefixes": ["!!Order!!", "#"],
+    "minFields": 3,
+    "columns": [
+      { "name": "call", "index": 0, "type": "callsign", "required": true },
+      { "name": "name", "index": 1, "type": "text", "required": true },
+      { "name": "state", "index": 2, "type": "text" },
+      { "name": "userText", "index": 3, "type": "text" }
+    ],
+    "dedupe": false,
+    "requiresMyCallInDxcc": false
+  },
+  "station": {
+    "callPool": "MASTER.DTA",
+    "speedRange": { "min": "speed - 5", "max": "speed + 10" },
+    "exchangeDefaults": { "name": "ALEX", "state": "ON" }
+  },
+  "messages": {},
+  "capabilities": { "farnsworth": false, "requiresMyDxcc": false }
+}

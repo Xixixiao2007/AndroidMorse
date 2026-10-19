@@ -89,6 +89,26 @@ class RealCallHistoryTest {
         assertIs<HistoryLoad.Rejected>(result)
     }
 
+    @Test
+    fun `the real NAQP history keeps name and state, and an empty state stays empty`() {
+        val history = parse("naqp")
+
+        // 15 448 data rows; 6 176 have no operator name (upstream drops them,
+        // `NaQp.pas:123`) and a handful fail the callsign grammar once accepted, so the
+        // usable set is just under 9 272.
+        assertTrue(history.size in 8_000..9_272, "unexpected NAQP history size ${history.size}")
+        assertTrue(history.calls.all { history.recordFor(it)?.get("name").orEmpty().isNotEmpty() })
+        // A known NA row and a known DX row: the DX record carries the empty state cell,
+        // which is what makes the station send its name only (`NaQp.pas:125,439-448`).
+        assertEquals("ERIC", history.recordFor("KP4NZ")?.get("name"))
+        assertEquals("KP4", history.recordFor("KP4NZ")?.get("state"))
+        assertEquals("PATRICK", history.recordFor("6Y5PW")?.get("name"))
+        assertEquals("", history.recordFor("6Y5PW")?.get("state"))
+        // A row with a blank operator name is not a usable record.
+        assertNull(history.recordFor("AA0BA"), "a row with a blank name must be skipped")
+        assertTrue(history.calls.none { it.startsWith("#") || it.startsWith("!!") })
+    }
+
     private val knowsW1Aw = object : CallFacts {
         override fun prefix(call: String): String? = null
         override fun zone(call: String): Double? = null

@@ -40,9 +40,6 @@ import com.bh4gzk.morserunner.settings.SessionSettings
  */
 object SessionBootstrap {
 
-    /** Milestone A's contest (spec §11): the one T7 has to make playable. */
-    const val DEFAULT_CONTEST: String = "cqww"
-
     /** CQ zone used when the operator's call resolves to a multi-zone entity (W1AW → CT, zone 5). */
     private const val DEFAULT_CQ_ZONE: String = "5"
 
@@ -55,7 +52,7 @@ object SessionBootstrap {
         settings: SessionSettings,
         seed: Long,
         startMs: Long,
-        contestId: String = DEFAULT_CONTEST,
+        contestId: String = ContestLibrary.DEFAULT_ID,
         /** A log to resume into (T9's session snapshot); empty for a new contest. */
         log: QsoLog = QsoLog(),
     ): Result {
