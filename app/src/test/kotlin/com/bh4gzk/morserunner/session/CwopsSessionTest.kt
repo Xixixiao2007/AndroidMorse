@@ -35,7 +35,7 @@ class CwopsSessionTest {
     /** The file is header-driven, so every fixture starts with its `!!Order!!` line. */
     private fun history(text: String): CallHistoryFile =
         assertIs<HistoryLoad.Loaded>(
-            CallHistoryFile.parse("!!Order!!,Call,Name,Exch1,UserText,\n$text", cwops.callHistory),
+            CallHistoryFile.parse("!!Order!!,Call,Name,Exch1,UserText,\n$text", cwops.callHistory!!),
         ).history
 
     private fun session(

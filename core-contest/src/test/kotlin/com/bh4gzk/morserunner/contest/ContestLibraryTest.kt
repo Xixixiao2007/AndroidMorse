@@ -19,7 +19,7 @@ class ContestLibraryTest {
             "unexpected load errors:\n" + bundled.errors.joinToString("\n") { it.render() },
         )
         assertEquals(
-            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops"),
+            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx"),
             bundled.configs.map { it.id },
         )
     }
@@ -40,7 +40,10 @@ class ContestLibraryTest {
             assertTrue(config.exchange.myFields.isNotEmpty(), "${config.id}: no exchange fields")
             assertTrue(config.exchange.fieldKeys.isNotEmpty(), "${config.id}: no field keys")
             assertTrue(config.scoring.multipliers.isNotEmpty(), "${config.id}: no multipliers")
-            assertTrue(config.callHistory.asset.isNotBlank(), "${config.id}: no call-history asset")
+            // T15: `callHistory` is optional. A document that declares one must name its asset.
+            config.callHistory?.let {
+                assertTrue(it.asset.isNotBlank(), "${config.id}: a call history without an asset")
+            }
             assertTrue(config.station.callPool.isNotBlank(), "${config.id}: no call pool")
             assertTrue(config.runModes.isNotEmpty(), "${config.id}: no run modes")
             assertTrue(

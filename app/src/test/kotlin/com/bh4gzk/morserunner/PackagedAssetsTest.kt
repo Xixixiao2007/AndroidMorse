@@ -19,6 +19,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -69,9 +70,9 @@ class PackagedAssetsTest {
         val config = bundled.configs.firstOrNull { it.id == "naqp" }
         assertNotNull(config, "no bundled naqp config")
 
-        val text = File(assetsDir, config.callHistory.asset).readText()
+        val text = File(assetsDir, config.callHistory!!.asset).readText()
         val history = assertIs<HistoryLoad.Loaded>(
-            CallHistoryFile.parse(text, config.callHistory, "W1AW", data.callFacts),
+            CallHistoryFile.parse(text, config.callHistory!!, "W1AW", data.callFacts),
         ).history
         assertTrue(history.size in 8_000..9_272, "unexpected NAQP history size ${history.size}")
         assertEquals("ERIC", history.recordFor("KP4NZ")?.get("name"))
@@ -111,10 +112,10 @@ class PackagedAssetsTest {
         val config = bundled.configs.firstOrNull { it.id == "k1usnsst" }
         assertNotNull(config, "no bundled k1usnsst config")
 
-        val file = File(assetsDir, config.callHistory.asset)
+        val file = File(assetsDir, config.callHistory!!.asset)
         assertEquals(251_728, file.length().toInt(), "the packaged history is not upstream's K1USNSST.txt")
         val history = assertIs<HistoryLoad.Loaded>(
-            CallHistoryFile.parse(file.readText(), config.callHistory, "W1AW", data.callFacts),
+            CallHistoryFile.parse(file.readText(), config.callHistory!!, "W1AW", data.callFacts),
         ).history
         // 15 045 lines; the file's own rule (a name and a QTH are required) leaves 10 707; the
         // shared call grammar drops 2 (`F/OZ1CGQ`, `VYIJA`). ADR-0011 §8.
@@ -160,10 +161,10 @@ class PackagedAssetsTest {
         val config = bundled.configs.firstOrNull { it.id == "allja" }
         assertNotNull(config, "no bundled allja config")
 
-        val file = File(assetsDir, config.callHistory.asset)
+        val file = File(assetsDir, config.callHistory!!.asset)
         assertEquals(31_462, file.length().toInt(), "the packaged history is not upstream's JARL_ALLJA.TXT")
         val history = assertIs<HistoryLoad.Loaded>(
-            CallHistoryFile.parse(file.readText(), config.callHistory, "W1AW", data.callFacts),
+            CallHistoryFile.parse(file.readText(), config.callHistory!!, "W1AW", data.callFacts),
         ).history
         // 2 542 lines: a '#' banner and 2 538 two-cell data rows. The file's rule (two non-empty
         // cells, no call grammar) and the port's agree exactly — the grammar drops nothing here,
@@ -209,10 +210,10 @@ class PackagedAssetsTest {
         val config = bundled.configs.firstOrNull { it.id == "acag" }
         assertNotNull(config, "no bundled acag config")
 
-        val file = File(assetsDir, config.callHistory.asset)
+        val file = File(assetsDir, config.callHistory!!.asset)
         assertEquals(38_526, file.length().toInt(), "the packaged history is not upstream's JARL_ACAG.TXT")
         val history = assertIs<HistoryLoad.Loaded>(
-            CallHistoryFile.parse(file.readText(), config.callHistory, "W1AW", data.callFacts),
+            CallHistoryFile.parse(file.readText(), config.callHistory!!, "W1AW", data.callFacts),
         ).history
         // 2 551 lines: a '#' banner and 2 547 two-cell data rows. The file's rule (two non-empty
         // cells, no call grammar) and the port's agree exactly (ADR-0013 §2).
@@ -258,10 +259,10 @@ class PackagedAssetsTest {
         val config = bundled.configs.firstOrNull { it.id == "cwops" }
         assertNotNull(config, "no bundled cwops config")
 
-        val file = File(assetsDir, config.callHistory.asset)
+        val file = File(assetsDir, config.callHistory!!.asset)
         assertEquals(190_371, file.length().toInt(), "the packaged history is not upstream's CWOPS.LIST")
         val history = assertIs<HistoryLoad.Loaded>(
-            CallHistoryFile.parse(file.readText(), config.callHistory, "W1AW", data.callFacts),
+            CallHistoryFile.parse(file.readText(), config.callHistory!!, "W1AW", data.callFacts),
         ).history
         // 6 344 lines → 6 290 records: upstream's rule table keeps 6 293 over 6 292 distinct
         // calls (`W1AL` is duplicated), and the shared call grammar drops `F/G7BED`/`I/W9CF`.
@@ -381,9 +382,53 @@ class PackagedAssetsTest {
         assertTrue(atPitch > 0.02, "no energy at the station's ${station.pitchHz} Hz: $atPitch")
     }
 
+    @Test
+    fun `the packaged MASTER DTA drives a real CQ WPX roster, and its serials stay in range`() {
+        // T15: CQ WPX is the first contest with no call history, so `MASTER.DTA` is the pool
+        // (`CqWpx.pas:87-97`) and the exchange is generated entirely by the document: the
+        // literal `599` plus a serial drawn from `Ini.pas:232-238`'s start-of-contest range.
+        val bundled = ContestLibrary.bundled()
+        assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
+        val config = bundled.configs.firstOrNull { it.id == "cqwpx" }
+        assertNotNull(config, "no bundled cqwpx config")
+        assertNull(config.callHistory, "CQ WPX must not pretend to have a call history")
+
+        val roster = StationRoster(
+            config = config,
+            pool = data.pool,
+            history = null,
+            settings = RosterSettings(speedWpm = 25),
+            seed = 20_261_020L,
+            calls = data.callFacts,
+        )
+        repeat(StationRoster.MAX_STATIONS) { roster.add() }
+        val stations = roster.stations
+        assertEquals(StationRoster.MAX_STATIONS, stations.size, "the roster did not fill to eight")
+        assertTrue(
+            stations.all { data.pool.contains(it.call) },
+            "a station invented a callsign outside MASTER.DTA",
+        )
+        for (station in stations) {
+            assertEquals("599", station.exchange.exch1, "${station.call} must send the literal 599")
+            val serial = station.exchange.exch2.toIntOrNull()
+            assertNotNull(serial, "${station.call}: '${station.exchange.exch2}' is not a serial")
+            assertTrue(serial in 1..176, "${station.call}: serial $serial outside Ini's range")
+        }
+
+        // The multiplier is `callPrefix(theirCall)`; a pool call with no WPX prefix would make
+        // the engine fail closed and score the contact zero (ADR-0015 §7). Measure the pool
+        // rather than assume: this is the number the ticket records.
+        var unresolved = 0
+        for (index in 0 until data.pool.size) {
+            if (data.callFacts.prefix(data.pool.callAt(index)) == null) unresolved++
+        }
+        // Measured on the shipped file: **0 of 46 039** calls fail the WPX prefix rule, so the
+        // fail-closed path can never cost a real station its point (ADR-0015 §7).
+        assertEquals(0, unresolved, "MASTER.DTA calls with no WPX prefix")
+    }
+
     /** Magnitude of [hz] in [samples] (Goertzel); enough to prove a tone is present. */
-    private fun toneAt(samples: FloatArray, frames: Int, hz: Double): Double {
-        val w = 2.0 * PI * hz / rate
+    private fun toneAt(samples: FloatArray, frames: Int, hz: Double): Double {        val w = 2.0 * PI * hz / rate
         val coeff = 2.0 * cos(w)
         var s1 = 0.0
         var s2 = 0.0

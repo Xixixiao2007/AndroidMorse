@@ -24,7 +24,7 @@ class CallHistoryFileTest {
     private fun spec(id: String): CallHistory {
         val result = ContestLibrary.load(id)
         assertIs<LoadResult.Success>(result, "$id did not load")
-        return result.config.callHistory
+        return result.config.callHistory!!
     }
 
     private fun load(text: String, id: String, myCall: String = "", calls: CallFacts = CallFacts.Unavailable) =

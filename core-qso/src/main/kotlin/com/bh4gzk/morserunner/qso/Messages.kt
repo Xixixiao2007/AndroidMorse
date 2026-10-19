@@ -75,24 +75,33 @@ data class Operator(val call: String, val exchange: OperatorExchange)
  * `messages` map overrides a wording by [QsoMessage.configKey]; a key the document does not
  * mention keeps the upstream default (ADR-0005 §7).
  *
- * Stateless apart from its two constructor arguments, so the same instance serves a whole
- * session and a test needs no contest document to check a wording.
+ * **The operator is a provider, not a value.** My exchange can change between two contacts: a
+ * contest whose sent piece reads the running serial sends `5NN001`, then `5NN002` (F8,
+ * `Log.pas:766`). Rendering reads the operator at call time, so one script instance serves a
+ * whole session and the queue, the keyer and the log all see the current serial. The secondary
+ * constructor keeps the fixed-operator form every test and the [StationScript] counterpart use.
  */
 class MessageScript(
-    private val operator: Operator,
+    private val operator: () -> Operator,
     private val wordings: Map<String, String> = emptyMap(),
 ) {
+
+    /** A script for one fixed operator: a unit test, or a station whose exchange never changes. */
+    constructor(operator: Operator, wordings: Map<String, String> = emptyMap()) : this({ operator }, wordings)
 
     /**
      * The text for [message]. [hisCall] is the station being worked, which changes during a
      * contact — that is why it is an argument rather than part of [operator].
      */
-    fun text(message: QsoMessage, hisCall: String = ""): String = renderTokens(
-        template = wordings[message.configKey] ?: default(message),
-        my = operator.call,
-        exchange = operator.exchange.piece,
-        hisCall = hisCall,
-    )
+    fun text(message: QsoMessage, hisCall: String = ""): String {
+        val current = operator()
+        return renderTokens(
+            template = wordings[message.configKey] ?: default(message),
+            my = current.call,
+            exchange = current.exchange.piece,
+            hisCall = hisCall,
+        )
+    }
 
     /** Upstream's default wording per message (`Contest.pas:412-450`). */
     private fun default(message: QsoMessage): String = when (message) {

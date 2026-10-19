@@ -78,7 +78,7 @@ class NaqpTest {
         val bundled = ContestLibrary.bundled()
         assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
         assertEquals(
-            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops"),
+            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx"),
             bundled.configs.map { it.id },
         )
         assertEquals(ContestConfig.SUPPORTED_SCHEMA_VERSION, naqp.schemaVersion)
@@ -130,7 +130,7 @@ class NaqpTest {
         // NaQp.pas:61-159: comma, skips '!!Order!!' and '#', needs tl.Count > 2,
         // columns call,name,state[,userText]; call and name required, name <= 12,
         // the state may be empty.
-        val history = naqp.callHistory
+        val history = naqp.callHistory!!
         assertEquals("NAQPCW.txt", history.asset)
         assertEquals(',', history.delimiter)
         assertEquals(listOf("!!Order!!", "#"), history.skipPrefixes)
@@ -156,7 +156,7 @@ class NaqpTest {
             K2DEF,JOSE,,
         """.trimIndent()
         val loaded = assertIs<HistoryLoad.Loaded>(
-            CallHistoryFile.parse(text, naqp.callHistory),
+            CallHistoryFile.parse(text, naqp.callHistory!!),
             "the NAQP history was rejected",
         ).history
 
@@ -240,7 +240,7 @@ class NaqpTest {
             "6Y5PW,PATRICK,",
             "JA1XYZ,HIRO,,",
         ).joinToString("\n")
-        return assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, naqp.callHistory)).history
+        return assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, naqp.callHistory!!)).history
     }
 
     private fun roster(seed: Long): StationRoster = StationRoster(

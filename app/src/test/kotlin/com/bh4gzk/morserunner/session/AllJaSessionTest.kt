@@ -35,7 +35,7 @@ class AllJaSessionTest {
     private val facts: CallFacts = CallFacts.Unavailable
 
     private fun history(text: String): CallHistoryFile =
-        assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, allja.callHistory)).history
+        assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, allja.callHistory!!)).history
 
     private fun session(
         history: CallHistoryFile,

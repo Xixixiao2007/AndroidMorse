@@ -55,7 +55,7 @@ class CwopsRulesTest {
     @Test
     fun `my sent exchange is upstream's default DAVID 123`() {
         // Ini.pas:112 `ExchDefault: 'DAVID 123'`, two boxes labelled Name / Exch (`:110`).
-        assertEquals(OperatorExchange("DAVID", "123"), cwt().operatorExchange)
+        assertEquals(OperatorExchange("DAVID", "123"), cwt().operatorExchange())
         assertEquals(
             mapOf("name" to "ROBERT", "exch" to "1343"),
             cwt().typedFields(entry()),
@@ -70,7 +70,7 @@ class CwopsRulesTest {
         val messages = config("cwops").messages
         assertEquals("CQ CWT <my>", messages["CQ"])
         assertEquals("CQ CQ CWT <my> <my>", messages["longCQ"])
-        val script = MessageScript(cwt().operator, messages)
+        val script = MessageScript(cwt().operator(), messages)
         assertEquals("CQ CWT W1AW", script.text(QsoMessage.CQ))
         assertEquals("CQ CQ CWT W1AW W1AW", script.text(QsoMessage.LONG_CQ))
         assertEquals("TU", script.text(QsoMessage.TU), "upstream's base TU is the bare word")

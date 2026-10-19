@@ -49,7 +49,7 @@ class SessionControllerTest {
     private val threeCalls: CallHistoryFile = load("DL1ABC,14,\nDL2XYZ,14,\nK1ABC,5,\n")
 
     private fun load(text: String): CallHistoryFile =
-        assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, cqww.callHistory)).history
+        assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, cqww.callHistory!!)).history
 
     private fun session(
         history: CallHistoryFile = oneCall,

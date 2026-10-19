@@ -1,6 +1,7 @@
 package com.bh4gzk.morserunner.session
 
 import android.content.res.AssetManager
+import com.bh4gzk.morserunner.contest.CallHistory
 import com.bh4gzk.morserunner.contest.CallHistoryFile
 import com.bh4gzk.morserunner.contest.ContestConfig
 import com.bh4gzk.morserunner.contest.ContestLibrary
@@ -64,13 +65,23 @@ object SessionBootstrap {
             )
         }
         val facts: CallFacts = data.callFacts
-        val parsed = history(assets, config, settings.myCall, facts)
+        val spec = config.callHistory
 
         val pool: CallPool
-        val historyLookup: HistoryLookup
+        val historyLookup: HistoryLookup?
         val autocomplete: Collection<String>
         val note: String
-        when (parsed) {
+        when (val parsed = if (spec == null) null else history(assets, spec, settings.myCall, facts)) {
+            // No call-history file at all (T15's CQ WPX): upstream reads `MASTER.DTA` as the
+            // station pool and takes every exchange from the contest's generation rules
+            // (`CqWpx.pas:87-97,299-317`), so there is nothing to parse and no note of loss —
+            // only a note of which pool is in use.
+            null -> {
+                pool = data.pool
+                historyLookup = null
+                autocomplete = emptyList()
+                note = "${config.name} · MASTER.DTA"
+            }
             is HistoryLoad.Loaded -> {
                 pool = parsed.history
                 historyLookup = parsed.history
@@ -109,13 +120,13 @@ object SessionBootstrap {
     /** The contest's call history, parsed against its own spec (`CallHistoryFile`). */
     private fun history(
         assets: AssetManager,
-        config: ContestConfig,
+        spec: CallHistory,
         myCall: String,
         calls: CallFacts,
     ): HistoryLoad {
-        val text = StationAssets.readText(assets, config.callHistory.asset)
-            ?: return HistoryLoad.Rejected("this build has no asset '${config.callHistory.asset}'")
-        return CallHistoryFile.parse(text, config.callHistory, myCall, calls)
+        val text = StationAssets.readText(assets, spec.asset)
+            ?: return HistoryLoad.Rejected("this build has no asset '${spec.asset}'")
+        return CallHistoryFile.parse(text, spec, myCall, calls)
     }
 
     /** My own exchange: the contest's defaults, with the DXCC-derived values as a fallback. */

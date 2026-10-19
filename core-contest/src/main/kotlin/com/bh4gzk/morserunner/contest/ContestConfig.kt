@@ -24,7 +24,13 @@ data class ContestConfig(
     val exchange: Exchange,
     val validation: List<ValidationRule>,
     val scoring: Scoring,
-    val callHistory: CallHistory,
+    /**
+     * The contest's call-history file, or `null` when it has none (CQ WPX; upstream reads
+     * `MASTER.DTA` as the station pool only, `CqWpx.pas:87-97`). A document that binds a
+     * history column without declaring a history is rejected by the loader, so `null` here
+     * means "no history bindings either".
+     */
+    val callHistory: CallHistory?,
     val station: Station,
     val messages: Map<String, String>,
     val capabilities: Capabilities,

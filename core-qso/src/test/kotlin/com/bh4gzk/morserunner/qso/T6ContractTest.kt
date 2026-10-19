@@ -58,7 +58,7 @@ class T6ContractTest {
         myCall: String = "",
         calls: CallFacts = CallFacts.Unavailable,
     ): CallHistoryFile {
-        val result = CallHistoryFile.parse(text, config.callHistory, myCall, calls)
+        val result = CallHistoryFile.parse(text, config.callHistory!!, myCall, calls)
         return assertIs<HistoryLoad.Loaded>(result, "history was rejected: $result").history
     }
 
@@ -120,7 +120,7 @@ class T6ContractTest {
         val station = assertNotNull(roster.add(), "the roster produced no station")
 
         val rules = ContestRules(cqww, MyStation("W1AW", mapOf("rst" to "599", "zone" to "5")), facts)
-        val machine = QsoMachine(MessageScript(rules.operator, cqww.messages), rules)
+        val machine = QsoMachine(MessageScript(rules.operator(), cqww.messages), rules)
         val operator = DxOperator(station.call, random = SeededRandom(seed + 1), runMode = RunMode.PILE_UP)
         val states = mutableListOf<OperatorState>()
 
@@ -180,7 +180,7 @@ class T6ContractTest {
                 mapOf("nr" to "12", "prec" to "B", "check" to "71", "section" to "OR"),
             ),
         )
-        val machine = QsoMachine(MessageScript(rules.operator, ss.messages), rules)
+        val machine = QsoMachine(MessageScript(rules.operator(), ss.messages), rules)
         val operator = DxOperator(
             station.call,
             random = SeededRandom(seed + 1),

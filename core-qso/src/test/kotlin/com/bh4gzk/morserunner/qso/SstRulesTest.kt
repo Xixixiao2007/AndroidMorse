@@ -66,7 +66,7 @@ class SstRulesTest {
     @Test
     fun `my sent exchange is upstream's default name and QTH`() {
         // Ini.pas:172 `ExchDefault: 'BRUCE MA'` for the K1USN Slow Speed Test.
-        assertEquals(OperatorExchange("BRUCE", "MA"), sst().operatorExchange)
+        assertEquals(OperatorExchange("BRUCE", "MA"), sst().operatorExchange())
         assertEquals(
             mapOf("name" to "MIKE", "qth" to "MA"),
             sst().typedFields(entry()),
@@ -78,7 +78,7 @@ class SstRulesTest {
     fun `the contest's message overrides are the Pascal's`() {
         // CWSST.pas:190,200,223: msgCQ 'CQ SST <my>', msgTU 'TU <my>',
         // msgLongCQ 'CQ CQ SST <my> <my>'.
-        val script = MessageScript(sst().operator, config("k1usnsst").messages)
+        val script = MessageScript(sst().operator(), config("k1usnsst").messages)
         assertEquals("CQ SST W1AW", script.text(QsoMessage.CQ))
         assertEquals("TU W1AW", script.text(QsoMessage.TU))
         assertEquals("CQ CQ SST W1AW W1AW", script.text(QsoMessage.LONG_CQ))

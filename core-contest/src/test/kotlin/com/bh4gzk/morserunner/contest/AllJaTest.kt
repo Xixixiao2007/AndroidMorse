@@ -68,7 +68,7 @@ class AllJaTest {
         val bundled = ContestLibrary.bundled()
         assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
         assertEquals(
-            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops"),
+            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx"),
             bundled.configs.map { it.id },
         )
         assertEquals(ContestConfig.SUPPORTED_SCHEMA_VERSION, allja.schemaVersion)
@@ -139,7 +139,7 @@ class AllJaTest {
         // AllJa.pas:50-100: comma + StrictDelimiter, skips '!!Order!!' and '#', keeps a row
         // with `tl.Count > 1`, columns call,<pref><power>[,usertext]; both required cells are
         // only tested for emptiness (no call grammar).
-        val history = allja.callHistory
+        val history = allja.callHistory!!
         assertEquals("JARL_ALLJA.TXT", history.asset, "AllJa.pas:72 loads its own file, not MASTER.DTA")
         assertEquals(',', history.delimiter)
         assertEquals(listOf("!!Order!!", "#"), history.skipPrefixes)
@@ -166,7 +166,7 @@ class AllJaTest {
             JA4GBD/8,112M
         """.trimIndent()
         val loaded = assertIs<HistoryLoad.Loaded>(
-            CallHistoryFile.parse(text, allja.callHistory),
+            CallHistoryFile.parse(text, allja.callHistory!!),
             "the ALL JA history was rejected",
         ).history
 
@@ -281,7 +281,7 @@ class AllJaTest {
             "JA9GHI,47H",
             "JH1JKL,09M",
         ).joinToString("\n")
-        return assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, allja.callHistory)).history
+        return assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, allja.callHistory!!)).history
     }
 
     private fun roster(seed: Long): StationRoster = StationRoster(

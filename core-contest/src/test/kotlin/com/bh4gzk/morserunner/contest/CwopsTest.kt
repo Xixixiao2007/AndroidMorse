@@ -58,7 +58,7 @@ class CwopsTest {
         val bundled = ContestLibrary.bundled()
         assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
         assertEquals(
-            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops"),
+            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx"),
             bundled.configs.map { it.id },
         )
         assertEquals(ContestConfig.SUPPORTED_SCHEMA_VERSION, cwops.schemaVersion)
@@ -136,7 +136,7 @@ class CwopsTest {
         // `tl.Count >= 3`; `:86-95` uppercase the call/name/exch, require all three, and drop a
         // name longer than 10 or an exchange longer than 5. IARU_HF.txt is the only other
         // header-driven history (ADR-0008), so the marker must **not** be a skip prefix.
-        val history = cwops.callHistory
+        val history = cwops.callHistory!!
         assertEquals("CWOPS.LIST", history.asset, "CwOps.pas:91 loads its own file, not MASTER.DTA")
         assertEquals(',', history.delimiter)
         assertEquals(listOf("#"), history.skipPrefixes, "the !!Order!! line is the header, not a skip")
@@ -166,7 +166,7 @@ class CwopsTest {
             SCOTT,W1AL,Cape Coral FL,FL
         """.trimIndent()
         val loaded = assertIs<HistoryLoad.Loaded>(
-            CallHistoryFile.parse(text, cwops.callHistory),
+            CallHistoryFile.parse(text, cwops.callHistory!!),
             "the CWT history was rejected",
         ).history
         val row = assertNotNull(loaded.recordFor("K1ABC"))
@@ -192,7 +192,7 @@ class CwopsTest {
             K3GHI,BOB,1343,Somewhere
         """.trimIndent()
         val loaded = assertIs<HistoryLoad.Loaded>(
-            CallHistoryFile.parse(text, cwops.callHistory),
+            CallHistoryFile.parse(text, cwops.callHistory!!),
             "the CWT history was rejected",
         ).history
 
@@ -298,7 +298,7 @@ class CwopsTest {
             F5XYZ,Pierre,F,Paris
             VK2ABC,Rob,VK,Sydney
         """.trimIndent()
-        return assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, cwops.callHistory)).history
+        return assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, cwops.callHistory!!)).history
     }
 
     private fun roster(seed: Long): StationRoster = StationRoster(

@@ -272,7 +272,11 @@ class SessionController private constructor(
                 roster = roster,
                 pool = pool,
                 rules = rules,
-                script = MessageScript(rules.operator, config.messages),
+                // F8 (T15): the script re-reads the operator at render time, and the operator's
+                // serial is `startingSerial + log.size` — upstream's `Tst.Me.NR`, incremented by
+                // `Log.pas:766` once per saved contact. The log is the state, so a resumed
+                // session continues the serial where it stopped.
+                script = MessageScript({ rules.operator(rules.serialFor(log.size)) }, config.messages),
                 myCall = myCall,
                 speedWpm = speedWpm,
                 pitchHz = pitchHz,
@@ -513,7 +517,8 @@ class SessionController private constructor(
                 ratePerHour = log.ratePerHour(),
                 suggestions = suggestions(),
                 myCall = myCall,
-                myExchange = rules.operatorExchange.piece,
+                // The serial of the contact being worked — the same number `script` sends.
+                myExchange = rules.operatorExchange(rules.serialFor(log.size)).piece,
             )
         }
 

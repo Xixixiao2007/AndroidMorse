@@ -54,11 +54,44 @@ class ContestRules(
             listOf(fields.take(half), fields.drop(half))
         }
 
-    /** My exchange as it is transmitted, `<exch1> <exch2>`. */
-    val operatorExchange: OperatorExchange = sentExchange()
+    /**
+     * The value of the contest's `serial` field at the start of the session.
+     *
+     * Upstream keeps the running serial in `Tst.Me.NR`: it is initialised when the contest
+     * starts from the exchange box (`Main.pas:1313-1317` `SetMySerialNR` → `SetMyExch2`,
+     * `:1517-1531`) — a numeric box gives its value, `#`/anything else gives 1 — and
+     * `Log.pas:764-766` increments it after every saved contact. The document supplies the
+     * field's declared start (`station.exchangeDefaults`); a contest with no serial field never
+     * reads this.
+     */
+    val startingSerial: Int = fields
+        .firstOrNull { it.type == FieldType.SERIAL }
+        ?.key
+        ?.let { key -> me.exchange[key]?.trim()?.toIntOrNull() }
+        ?: 1
 
-    /** The operator identity the [MessageScript] needs. */
-    val operator: Operator get() = Operator(me.call, operatorExchange)
+    /**
+     * The serial contact number [logged] sends, counting the contacts already in the log.
+     *
+     * Contact *n* (1-based) sends `startingSerial + n - 1`, which is upstream's `Inc`-per-QSO
+     * (`Log.pas:766`) without the mutable field: the log is the state, so a resumed session
+     * (`SessionController`'s `log` parameter) continues where it stopped.
+     */
+    fun serialFor(logged: Int): Int = startingSerial + logged
+
+    /**
+     * My exchange as it is transmitted, `<exch1> <exch2>`.
+     *
+     * [serial] is the running serial (F8): when the document declares a `serial` field, that
+     * field's value in `exchange.sent.*` becomes [serial] instead of the static
+     * `station.exchangeDefaults` value, so a contest whose sent piece reads the serial sends the
+     * current number rather than the same one all session. `null` (the default) keeps the static
+     * value, which is what every contest without a serial field wants.
+     */
+    fun operatorExchange(serial: Int? = null): OperatorExchange = sentExchange(serial)
+
+    /** The operator identity the [MessageScript] needs, with the [serial] of the next contact. */
+    fun operator(serial: Int? = null): Operator = Operator(me.call, operatorExchange(serial))
 
     // --- entry ------------------------------------------------------------------
 
@@ -222,19 +255,36 @@ class ContestRules(
 
     // --- internals ---------------------------------------------------------------
 
-    private fun sentExchange(): OperatorExchange {
+    private fun sentExchange(serial: Int?): OperatorExchange {
+        val values = exchangeValues(serial)
         val sent = config.exchange.sent
             ?: return OperatorExchange(
-                exch1 = fields.getOrNull(0)?.let { me.exchange[it.key] } ?: "",
-                exch2 = fields.getOrNull(1)?.let { me.exchange[it.key] } ?: "",
+                exch1 = fields.getOrNull(0)?.let { values[it.key] } ?: "",
+                exch2 = fields.getOrNull(1)?.let { values[it.key] } ?: "",
             )
-        val environment = config.environment() + me.exchange.mapValues { (key, value) ->
-            numericValue(me.exchange, key, value)
+        val environment = config.environment() + values.mapValues { (key, value) ->
+            numericValue(values, key, value)
         }
         return OperatorExchange(
             exch1 = render(sent.exch1, environment),
             exch2 = render(sent.exch2, environment),
         )
+    }
+
+    /**
+     * My exchange values, with the contest's `serial` field replaced by [serial] when one is
+     * given (F8).
+     *
+     * Upstream's `Tst.Me.NR` is state, not a document value: `Log.pas:766` increments it after
+     * every saved contact and `Station.NrAsText` reads the current number. The document keeps
+     * describing the field — its type, its range, its sent form — and the engine supplies the
+     * running value, which is why no schema key was needed (ADR-0015 §2). A contest with no
+     * serial field is unaffected: the argument has nothing to override.
+     */
+    private fun exchangeValues(serial: Int?): Map<String, String> {
+        if (serial == null) return me.exchange
+        val key = fields.firstOrNull { it.type == FieldType.SERIAL }?.key ?: return me.exchange
+        return me.exchange + (key to serial.toString())
     }
 
     private fun render(

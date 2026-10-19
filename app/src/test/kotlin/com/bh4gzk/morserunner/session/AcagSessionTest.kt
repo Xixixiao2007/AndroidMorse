@@ -36,7 +36,7 @@ class AcagSessionTest {
     private val facts: CallFacts = CallFacts.Unavailable
 
     private fun history(text: String): CallHistoryFile =
-        assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, acag.callHistory)).history
+        assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, acag.callHistory!!)).history
 
     private fun session(
         history: CallHistoryFile,

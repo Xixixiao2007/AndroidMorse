@@ -99,6 +99,10 @@ hardest — are expressible, so the remaining nine are expected to fit (ADR-0004
     "multipliers": [ { "key": "'ZN-' + str(zone)" }, { "key": "…", "when": "…" } ]
   },
 
+  // Optional (T15): absent means the contest has no call-history file. CQ WPX is the case:
+  // upstream reads MASTER.DTA as the station pool only and generates every exchange from its
+  // own rules (`CqWpx.pas:87-97,299-317`). A `history` binding without this block is a
+  // load-time error, so "no history" can never hide a column typo.
   "callHistory": {
     "asset": "CQWWCW.TXT",
     "delimiter": ",",
@@ -133,7 +137,7 @@ Every expression is evaluated against this identifier set; any other identifier 
 | Expression | Identifiers available |
 |---|---|
 | `station.speedRange.*` | `speed` |
-| `exchange.sent.*` | `myFields[].key` |
+| `exchange.sent.*` | `myFields[].key` — a `serial` field's value is the **running serial** (below) |
 | `exchange.their.derive.*` | earlier derives, `their.bindings` names, `their.dice` |
 | `exchange.their.exch1/exch2` | derives, bindings, dice |
 | `validation[].when` | `myFields[].key` |
@@ -142,6 +146,14 @@ Every expression is evaluated against this identifier set; any other identifier 
 
 `myCountry`/`myContinent` come from the DXCC lookup of the operator's own call (spec §9);
 `theirCall`/`theirExch*`/`their<Group>` are the logged values of the QSO.
+
+**The running serial (T15).** For a contest that declares a `serial` field, `exchange.sent.*`
+sees that field's **current** value — the start (`station.exchangeDefaults`, else `1`) plus the
+contacts already logged — not the static configured value. Upstream keeps the number in
+`Tst.Me.NR`, initialised when the contest starts (`Main.pas:1320-1325`, `:1517-1531`) and
+incremented after every saved contact (`Log.pas:766`); `Station.pas:364-430 NrAsText` renders it
+as the exchange piece. It is a **value substitution, not a new identifier**: the environment
+table above is unchanged, and a document without a serial field is unaffected (ADR-0015 §2).
 
 ### Load-time validation (what a bad config cannot do)
 
@@ -155,7 +167,9 @@ offending JSON or expression:
   (`ExprError.render()`);
 - an identifier outside the environment table above;
 - an invalid `entryParse`/`their.parse` regex, or a group with no matching field;
-- `schemaVersion` ≠ 1, an `id` that is not a known contest id, duplicate field keys.
+- `schemaVersion` ≠ 1, an `id` that is not a known contest id, duplicate field keys;
+- a `callHistory` block that is present but malformed. The key itself is optional (T15): absent
+  means the contest has no history, and a `history` binding without one is rejected.
 
 ## 5. Expression language
 

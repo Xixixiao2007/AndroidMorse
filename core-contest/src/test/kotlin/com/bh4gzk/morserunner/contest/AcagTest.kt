@@ -69,7 +69,7 @@ class AcagTest {
         val bundled = ContestLibrary.bundled()
         assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
         assertEquals(
-            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops"),
+            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx"),
             bundled.configs.map { it.id },
         )
         assertEquals(ContestConfig.SUPPORTED_SCHEMA_VERSION, acag.schemaVersion)
@@ -148,7 +148,7 @@ class AcagTest {
         // '!!Order!!' and '#', keeps a row with `tl.Count > 1`, columns
         // call,<city|gun|ku><power>[,usertext]; both required cells are only tested for
         // emptiness (no call grammar).
-        val history = acag.callHistory
+        val history = acag.callHistory!!
         assertEquals("JARL_ACAG.TXT", history.asset, "Acag.pas:72 loads its own file, not MASTER.DTA")
         assertEquals(',', history.delimiter)
         assertEquals(listOf("!!Order!!", "#"), history.skipPrefixes)
@@ -175,7 +175,7 @@ class AcagTest {
             JA4GBD/8,112M
         """.trimIndent()
         val loaded = assertIs<HistoryLoad.Loaded>(
-            CallHistoryFile.parse(text, acag.callHistory),
+            CallHistoryFile.parse(text, acag.callHistory!!),
             "the ACAG history was rejected",
         ).history
 
@@ -291,7 +291,7 @@ class AcagTest {
             "JL1MNO,1402H",
             "JQ1ABC,1005L",
         ).joinToString("\n")
-        return assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, acag.callHistory)).history
+        return assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, acag.callHistory!!)).history
     }
 
     private fun roster(seed: Long): StationRoster = StationRoster(

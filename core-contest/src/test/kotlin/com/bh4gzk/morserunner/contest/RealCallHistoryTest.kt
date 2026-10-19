@@ -35,8 +35,12 @@ class RealCallHistoryTest {
             ?: root.listFiles()?.firstOrNull { it.name.equals(name, ignoreCase = true) }
     }
 
+    /**
+     * The spec of a contest that ships a history. CQ WPX is the one that does not, and it has
+     * its own assertion below rather than a fixture here.
+     */
     private fun spec(id: String): CallHistory =
-        assertIs<LoadResult.Success>(ContestLibrary.load(id)).config.callHistory
+        assertIs<LoadResult.Success>(ContestLibrary.load(id)).config.callHistory!!
 
     private fun parse(id: String, myCall: String = "", calls: CallFacts = CallFacts.Unavailable): CallHistoryFile {
         val file = asset(spec(id).asset)

@@ -49,7 +49,7 @@ class NaqpSessionTest {
     }
 
     private fun history(text: String): CallHistoryFile =
-        assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, naqp.callHistory)).history
+        assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, naqp.callHistory!!)).history
 
     private fun session(
         history: CallHistoryFile,

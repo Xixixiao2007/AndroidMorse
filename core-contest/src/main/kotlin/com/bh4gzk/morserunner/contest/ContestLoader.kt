@@ -104,7 +104,9 @@ private class Loader(private val source: String) {
         val duration = root.obj("duration", "")?.let { readDuration(it) }
         val runModes = readRunModes(root)
         val constants = readConstants(root)
-        val callHistory = root.obj("callHistory", "")?.let { readCallHistory(it) }
+        // Optional since T15: CQ WPX has no call-history file (upstream reads MASTER.DTA as
+        // the pool only, `CqWpx.pas:87-97`), and inventing one would be inventing data.
+        val callHistory = root.obj("callHistory", "", required = false)?.let { readCallHistory(it) }
         val exchange = root.obj("exchange", "")?.let { readExchange(it, constants, callHistory) }
         val validation = readValidation(root, constants, exchange?.fieldKeys ?: emptySet())
         val scoring = root.obj("scoring", "")?.let { readScoring(it, constants, exchange) }
@@ -112,7 +114,7 @@ private class Loader(private val source: String) {
         val messages = readMessages(root)
         val capabilities = root.obj("capabilities", "")?.let { readCapabilities(it) }
 
-        if (duration == null || callHistory == null || exchange == null || scoring == null ||
+        if (duration == null || exchange == null || scoring == null ||
             station == null || capabilities == null
         ) {
             return null

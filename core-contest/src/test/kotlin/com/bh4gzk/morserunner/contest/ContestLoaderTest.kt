@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -62,6 +63,25 @@ class ContestLoaderTest {
     fun `rejects a missing required field`() {
         val errors = errors("cqww") { it.replace("    \"asset\": \"CQWWCW.txt\",\n", "") }
         assertHas(errors, "callHistory.asset", "missing required string")
+    }
+
+    @Test
+    fun `a document without a call history loads, and one that binds a column still fails`() {
+        // T15: `callHistory` is optional (CQ WPX has none, `CqWpx.pas:87-97` reads MASTER.DTA
+        // as the pool only). "Optional" must not hide a typo: a `history` binding without a
+        // history is still rejected, because there is no column list to validate it against.
+        val loaded = ContestLoader.load("cqwpx.json", text("cqwpx"))
+        val config = assertIs<LoadResult.Success>(loaded, "cqwpx was rejected").config
+        assertNull(config.callHistory, "cqwpx declares no call history")
+        assertTrue(config.station.callPool.isNotBlank(), "the pool is still declared")
+
+        val bound = errors("cqwpx") {
+            it.replace(
+                "\"hisNr\": { \"source\": \"serial\" }",
+                "\"hisNr\": { \"source\": \"history\", \"column\": \"zone\" }",
+            )
+        }
+        assertHas(bound, "exchange.their.bindings.hisNr.column", "is not a call-history column")
     }
 
     @Test

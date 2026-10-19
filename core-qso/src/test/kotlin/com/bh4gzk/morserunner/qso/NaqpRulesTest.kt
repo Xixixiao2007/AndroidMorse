@@ -67,7 +67,7 @@ class NaqpRulesTest {
     @Test
     fun `my sent exchange is upstream's default name and state`() {
         // Ini.pas:133 `ExchDefault: 'ALEX ON'` for NCJ NAQP; two boxes, one field each.
-        assertEquals(OperatorExchange("ALEX", "ON"), naqp().operatorExchange)
+        assertEquals(OperatorExchange("ALEX", "ON"), naqp().operatorExchange())
         assertEquals(
             mapOf("name" to "MIKE", "state" to "OR"),
             naqp().typedFields(entry()),

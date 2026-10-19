@@ -49,7 +49,7 @@ class SstSessionTest {
     }
 
     private fun history(text: String): CallHistoryFile =
-        assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, sst.callHistory)).history
+        assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, sst.callHistory!!)).history
 
     private fun session(
         history: CallHistoryFile,

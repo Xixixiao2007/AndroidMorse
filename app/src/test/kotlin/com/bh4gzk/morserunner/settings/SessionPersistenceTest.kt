@@ -36,7 +36,7 @@ class SessionPersistenceTest {
     private val cqww: ContestConfig = assertIs<LoadResult.Success>(ContestLibrary.load("cqww")).config
 
     private val calls: CallHistoryFile =
-        assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse("DL1ABC,14,\nK1ABC,5,\n", cqww.callHistory)).history
+        assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse("DL1ABC,14,\nK1ABC,5,\n", cqww.callHistory!!)).history
 
     private fun session(settings: SessionSettings = SessionSettings()) = SessionController.start(
         config = cqww,

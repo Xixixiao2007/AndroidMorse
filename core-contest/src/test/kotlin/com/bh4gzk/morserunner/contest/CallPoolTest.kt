@@ -46,7 +46,7 @@ class CallPoolTest {
     }
 
     private fun history(cqww: ContestConfig, text: String): CallHistoryFile {
-        val result = CallHistoryFile.parse(text, cqww.callHistory)
+        val result = CallHistoryFile.parse(text, cqww.callHistory!!)
         return assertIs<HistoryLoad.Loaded>(result, "history was rejected: $result").history
     }
 

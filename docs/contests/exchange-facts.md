@@ -204,6 +204,31 @@ a skip prefix — the config lists only `#`. The multiplier is the first one in 
 not derived from the exchange at all: it is the call, which is why two stations in the same state
 are two multipliers and a duplicate call adds none.
 
+## CQ WPX — `CqWpx.pas` (T15, the sixth per-contest ticket — the first with no call history)
+
+| | |
+|---|---|
+| call history | **none** — `LoadCallHistory` (`:87-97`) fills `TCallList` from `Master.dta` through `CallLst.pas:40-61`, i.e. the *pool*, and `PickStation` (`:246-249`) returns -1; nothing is parsed per row |
+| my exchange | `etRST` + `etSerialNr`, default `5NN #`, msg `'''RST <serial>'' (e.g. 5NN #\|123)'` (`Ini.pas:96-103`); captions `'RST'` (`ExchFields.pas:44`, `[1-5E][1-9N][1-9N]`, L3) and `'Nr.'` (`:53`, `([0-9OTN]+)|(#)`, L4), anchored as `'^(' + R + ')$'` (`Contest.pas:310`) |
+| my serial | `Tst.Me.NR` starts at 1 for the start-of-contest mode (`Main.pas:1313-1317` → `:1511-1531`; `#`/non-numeric → 1) and `Inc`s after every saved contact (`Log.pas:764-766`); `Main.pas:599-601` maps `A/E/N → 1/5/9` in the RST box, `:665-673` maps `A/N/T → 1/9/0` in the serial box |
+| my sent text | `Format('%d%.3d', [RST, NR])` — report and **three-digit** serial, concatenated — then `599 → 5NN` (`Station.pas:384-394,433`): `5NN001`, one piece |
+| DX Exch1 | the literal `'599'` (`:323-326` `getExch1`) |
+| DX Exch2 | `IntToStr(GetNR(station))` (`:299-304`). `GetNR` (`:314-320`) is `1 + Round(Random * Tst.Minute * Skills)` for HST and the start-of-contest mode (`DxOper.pas:216-220`), and a WPX entry distribution (`:118-212`) for the mid/end/custom ranges |
+| serial range | the start-of-contest setting is `MinVal:1; MaxVal:176`, 1–3 digits (`Ini.pas:234`); `SerialNR` defaults to `snStartContest` (`:238`) |
+| points | constant 1 (`:285-288`) |
+| multiplier | `Qso.Pfx` (`:289`), which `Log.pas:715` sets to `ExtractPrefix(Qso.Call)` — the WPX prefix: `DL2XYZ → DL2`, `W7SST/6 → W6`, `DL/AA1ZZ → DL0` (`CallsignUtils.pas:58-133`, `DeleteTrailingLetters = True`) |
+| messages | **none** — `CqWpx.pas` has no `SendMsg` override, so the base wording applies |
+| capability flags | `TCqWpx.Create` (`:100-107`) builds `CallLst` + `SerialNRGen` and sets neither `BFarnsworthEnabled` nor a DXCC requirement |
+| station info | `GetStationInfo` (`:264-278`) returns `<call> - <Continent>/<Entity>` for the status bar — a line the port does not have (ADR-0011 §8) |
+
+Implemented in `contests/cqwpx.json` (ADR-0015). It is the first contest in the series with **no
+`callHistory` block at all**: `MASTER.DTA` is the pool and every exchange piece is generated from
+the document, which is why T15 made the schema key optional. It is also the first contest whose
+*operator* exchange changes between contacts — the running serial, F8 — and the first to score on
+`callPrefix`, a built-in that existed since T2 and had no caller until now. The serial's
+**distribution** is the port's declared approximation (uniform over 1..176) where upstream's is a
+function of elapsed time; the *range* is upstream's.
+
 ### Data inventory for the remaining per-contest tickets (verified 2026-10-20)
 
 | Asset | Used by | State |
@@ -216,12 +241,12 @@ are two multipliers and a duplicate call adds none.
 | `JARL_ACAG.TXT` (2 551 lines, `call,exch1[,usertext]`, `#` banner) | JARL ACAG (`Acag.pas:72-100`) | packaged (T13) — RST `599` + `<city\|gun\|ku><power>`; no serial; 1 point; multiplier = `Exch2` minus a trailing `L/M/H/P` (`:191-207`), a **string** so leading zeros survive |
 | `CWOPS.LIST` (6 344 lines, header-driven `!!Order!!,Call,Name,Exch1,UserText`) | CWops CWT (`CwOps.pas:74`) | packaged (T14) — name + CWT number/state/country from the file; 1 point; multiplier = **the worked call**; no serial |
 | `FDGOTA.txt` (17 330 lines, `!!Order!!,Call,Exch1,Sect,UserText`) | ARRL Field Day (`ArrlFd.pas:224`) | **not packaged** — class + section from the file; the two-pass club-name logic (`:227-260`) is engine code |
-| `HstResults.txt` | `Main.pas` (HST results import) | empty file; HST also needs the serial fix (F8) |
-| — | CQ WPX | no history → `MASTER.DTA`; needs F8 (the once-computed serial) |
+| — | CQ WPX | packaged (T15) — **no history at all**: `MASTER.DTA` is the pool and every exchange piece is generated; RST + a **running serial** (the first contest with one); 1 point; multiplier = the worked call's WPX prefix |
+| `HstResults.txt` | `Main.pas` (HST results import) | empty file; HST needs its own score table (F8 is fixed by T15) |
 
 > **T11 correction to the T3 inventory.** The rows above for ALL JA, ACAG, CWops CWT and Field
 > Day used to read "no history → `MASTER.DTA`" (and `FDGOTA.txt` "nothing — `grep` finds no
 > Pascal reference"). That was wrong: each of those contests **does** load its own file, by the
 > absolute path at `ParamStr(1) + <name>` — `AllJa.pas:72`, `Acag.pas:72`, `CwOps.pas:74`,
-> `ArrlFd.pas:224`. The files ship in `upstream/MorseRunnerCE/`. Only CQ WPX (and the serial
-> contests WPX/HST) genuinely has no history and no serial-free path.
+> `ArrlFd.pas:224`. The files ship in `upstream/MorseRunnerCE/`. Only CQ WPX and HST genuinely have
+> no history; both carry the running serial, which T15 fixed for both (ADR-0015 §2).

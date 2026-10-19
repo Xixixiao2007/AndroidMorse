@@ -50,7 +50,7 @@ class AcagRulesTest {
     @Test
     fun `my sent exchange is upstream's default 5NN and 1002H`() {
         // Ini.pas:192 `ExchDefault: '5NN 1002H'`; `Acag.pas` overrides no message.
-        assertEquals(OperatorExchange("5NN", "1002H"), acag().operatorExchange)
+        assertEquals(OperatorExchange("5NN", "1002H"), acag().operatorExchange())
         assertEquals(
             mapOf("rst" to "599", "city" to "1430H"),
             acag().typedFields(entry()),
@@ -63,7 +63,7 @@ class AcagRulesTest {
         // `Acag.pas` has no `SendMsg` override at all (there is no `SendMsg` in the file), so
         // `messages: {}` is the faithful document and the base templates apply.
         assertTrue(config("acag").messages.isEmpty(), "ACAG overrides no wording")
-        val script = MessageScript(acag().operator, config("acag").messages)
+        val script = MessageScript(acag().operator(), config("acag").messages)
         assertEquals("CQ W1AW TEST", script.text(QsoMessage.CQ))
         assertEquals("TU", script.text(QsoMessage.TU), "upstream's base TU is the bare word")
         assertEquals("NR?", script.text(QsoMessage.NR_QM))

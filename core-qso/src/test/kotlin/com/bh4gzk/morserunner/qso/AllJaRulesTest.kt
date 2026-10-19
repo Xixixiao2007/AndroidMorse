@@ -46,7 +46,7 @@ class AllJaRulesTest {
     @Test
     fun `my sent exchange is upstream's default 5NN and 10H`() {
         // Ini.pas:183 `ExchDefault: '5NN 10H'`; `AllJa.pas` overrides no message.
-        assertEquals(OperatorExchange("5NN", "10H"), allja().operatorExchange)
+        assertEquals(OperatorExchange("5NN", "10H"), allja().operatorExchange())
         assertEquals(
             mapOf("rst" to "599", "pref" to "14H"),
             allja().typedFields(entry()),
@@ -60,7 +60,7 @@ class AllJaRulesTest {
         // `messages: {}` is the faithful document and the base templates apply
         // (`Messages.kt`, `Contest.pas:412-450`).
         assertTrue(config("allja").messages.isEmpty(), "ALL JA overrides no wording")
-        val script = MessageScript(allja().operator, config("allja").messages)
+        val script = MessageScript(allja().operator(), config("allja").messages)
         assertEquals("CQ W1AW TEST", script.text(QsoMessage.CQ))
         assertEquals("TU", script.text(QsoMessage.TU), "upstream's base TU is the bare word")
         assertEquals("CQ CQ TEST W1AW W1AW TEST", script.text(QsoMessage.LONG_CQ))

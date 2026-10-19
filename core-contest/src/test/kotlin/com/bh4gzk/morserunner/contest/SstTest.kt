@@ -75,7 +75,7 @@ class SstTest {
         val bundled = ContestLibrary.bundled()
         assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
         assertEquals(
-            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops"),
+            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx"),
             bundled.configs.map { it.id },
         )
         assertEquals(ContestConfig.SUPPORTED_SCHEMA_VERSION, sst.schemaVersion)
@@ -139,7 +139,7 @@ class SstTest {
     fun `the call history is the upstream file shape`() {
         // CWSST.pas:52-110: comma, skips '!!Order!!' and '#', needs tl.Count >= 3,
         // columns call,name,exch1[,userText] = call,name,QTH; call/name/QTH all required.
-        val history = sst.callHistory
+        val history = sst.callHistory!!
         assertEquals("K1USNSST.txt", history.asset)
         assertEquals(',', history.delimiter)
         assertEquals(listOf("!!Order!!", "#"), history.skipPrefixes)
@@ -167,7 +167,7 @@ class SstTest {
             K2DEF,JOSE
         """.trimIndent()
         val loaded = assertIs<HistoryLoad.Loaded>(
-            CallHistoryFile.parse(text, sst.callHistory),
+            CallHistoryFile.parse(text, sst.callHistory!!),
             "the SST history was rejected",
         ).history
 
@@ -281,7 +281,7 @@ class SstTest {
             "VE1BCD,IVAN,NS,",
             "G0EFG,JACK,DX,",
         ).joinToString("\n")
-        return assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, sst.callHistory)).history
+        return assertIs<HistoryLoad.Loaded>(CallHistoryFile.parse(text, sst.callHistory!!)).history
     }
 
     private fun roster(seed: Long): StationRoster = StationRoster(

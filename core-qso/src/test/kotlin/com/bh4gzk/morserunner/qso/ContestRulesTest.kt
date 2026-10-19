@@ -69,13 +69,13 @@ class ContestRulesTest {
 
     @Test
     fun `the two sent pieces are the fields in schema order`() {
-        assertEquals(OperatorExchange("5NN", "3"), cqww().operatorExchange)
+        assertEquals(OperatorExchange("5NN", "3"), cqww().operatorExchange())
     }
 
     @Test
     fun `a contest with sent expressions combines the fields`() {
         // arrlss.json: exch1 = "str(nr) + ' ' + prec", exch2 = "... ' ' + section".
-        assertEquals(OperatorExchange("5 A", "72 OR"), ss().operatorExchange)
+        assertEquals(OperatorExchange("5 A", "72 OR"), ss().operatorExchange())
     }
 
     // --- entry validation ------------------------------------------------------
