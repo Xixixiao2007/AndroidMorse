@@ -17,3 +17,11 @@ This workspace runs Matt Pocock's AI-coding workflow (ask-matt).
   A port is a **rewrite**, not a build.
 - `github.com` needs the local proxy; `git` is preconfigured for `127.0.0.1:7892`.
 - Do not make credentials, callsigns, or personal data part of committed source.
+
+## Session conventions
+- **Model**: new sessions should use `DeepSeek-V4.1-Flash` (the name with the decimal point);
+  never switch the model of a session that is already open (operator instruction, 2026-10-19).
+- **One Gradle at a time**: all sessions share this working tree and its `.gradle/` locks.
+  Two concurrent builds wait on each other or fail with a lock timeout, so stagger them.
+  Parallel *sessions* are fine only when their file scopes are disjoint (e.g. `core-expr` vs
+  `core-audio`); commits stay separate.
