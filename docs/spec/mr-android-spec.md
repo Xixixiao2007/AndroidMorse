@@ -115,7 +115,12 @@ hardest — are expressible, so the remaining nine are expected to fit (ADR-0004
       { "name": "userText", "index": 2, "type": "text" }
     ],
     "dedupe": false,
-    "requiresMyCallInDxcc": false
+    "requiresMyCallInDxcc": false,
+    // Optional (T17): which rows *this* operator may work. Evaluated per row against the row's
+    // own columns plus the station properties, so the pool itself can depend on who I am.
+    // ARRL DX is the case: a W/VE operator works the DX stations (the rows carrying a power) and
+    // a DX operator works the W/VE stations (the rows carrying a state), `ArrlDx.pas:157-158`.
+    "filter": "ifElse(myCountry == 'United States of America' or myCountry == 'Canada', power != '', state != '')"
   },
 
   "station": {
@@ -142,10 +147,23 @@ Every expression is evaluated against this identifier set; any other identifier 
 | `exchange.their.exch1/exch2` | derives, bindings, dice |
 | `validation[].when` | `myFields[].key` |
 | `scoring.points`, `scoring.multipliers[].key/when` | `myFields[].key`, `theirCall`, `theirExch1`, `theirExch2`, `their<Group>` from `their.parse`, `myCall`, `myCountry`, `myContinent`, `myZone`, `mySection` |
-| every expression above | `constants` |
+| `callHistory.filter` | the history's own `columns[].name`, `myCall`, `myCountry`, `myContinent`, `myZone`, `mySection` |
+| every expression above | `constants` (not `callHistory.filter`: a history is read before the contest's expressions are evaluated) |
 
 `myCountry`/`myContinent` come from the DXCC lookup of the operator's own call (spec §9);
 `theirCall`/`theirExch*`/`their<Group>` are the logged values of the QSO.
+
+**The history's row filter (T17).** `callHistory.filter` is a **per-row predicate**, not a value
+substitution: the history is read once at session start, and for every candidate row it is
+evaluated against that row's cells (a declared column the row does not carry reads as `""`) plus
+the station properties. A row it does not accept is not a station — it is dropped before the pool
+is built, exactly like upstream's `continue` (`ArrlDx.pas:157-158`). Because it is the first
+expression evaluated in a session it sees **no** QSO identifiers and **no** `constants`; the loader
+enforces that set.
+
+It **fails closed and loudly**: a predicate that cannot be evaluated (an operator call that does
+not resolve in DXCC, so `myCountry` has no value), or one whose verdict is not a boolean, makes the
+whole history `Rejected` with the reason — never a silently empty pool.
 
 **The running serial (T15).** For a contest that declares a `serial` field, `exchange.sent.*`
 sees that field's **current** value — the start (`station.exchangeDefaults`, else `1`) plus the
@@ -169,7 +187,9 @@ offending JSON or expression:
 - an invalid `entryParse`/`their.parse` regex, or a group with no matching field;
 - `schemaVersion` ≠ 1, an `id` that is not a known contest id, duplicate field keys;
 - a `callHistory` block that is present but malformed. The key itself is optional (T15): absent
-  means the contest has no history, and a `history` binding without one is rejected.
+  means the contest has no history, and a `history` binding without one is rejected. Its optional
+  `filter` (T17) is compiled against the history's own columns and the station properties, so a
+  filter that reads `theirCall` — or a column the block does not declare — is rejected here.
 
 ## 5. Expression language
 

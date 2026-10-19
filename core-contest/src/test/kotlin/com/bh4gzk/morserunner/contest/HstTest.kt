@@ -67,7 +67,7 @@ class HstTest {
         assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
         assertEquals(
             listOf(
-                "cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx", "hst",
+                "cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx", "hst", "arrldx",
             ),
             bundled.configs.map { it.id },
         )

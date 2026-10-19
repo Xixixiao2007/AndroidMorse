@@ -213,6 +213,15 @@ data class CallHistory(
     val dedupe: Boolean,
     /** IARU HF refuses any history record unless the operator's call resolves in DXCC. */
     val requiresMyCallInDxcc: Boolean,
+    /**
+     * Which rows this operator may work (T17): evaluated **per row** against the row's own
+     * columns plus the station properties, so the pool itself depends on who I am.
+     *
+     * ARRL DX is why this exists: a W/VE operator works only DX stations (the rows that carry
+     * a power) and a DX operator works only W/VE stations (the rows that carry a state),
+     * `ArrlDx.pas:157-158`. `null` keeps every row, which is what every earlier contest wants.
+     */
+    val filter: Expression? = null,
 )
 
 // --- station ------------------------------------------------------------------

@@ -427,6 +427,97 @@ class PackagedAssetsTest {
         assertEquals(0, unresolved, "MASTER.DTA calls with no WPX prefix")
     }
 
+    @Test
+    fun `the packaged ARRL DX history splits into the two contest sides`() {
+        // T17: ARRL DX is the first contest whose *station pool* depends on which side of the
+        // contest the operator is on (`ArrlDx.pas:157-158`). The file is upstream's
+        // `ARRLDXCW_USDX.txt`, copied unmodified (MPL-2.0, spec §9): one call history carrying a
+        // `State` **and** a `Power` column, where every data row fills exactly one.
+        val bundled = ContestLibrary.bundled()
+        assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
+        val config = bundled.configs.firstOrNull { it.id == "arrldx" }
+        assertNotNull(config, "no bundled arrldx config")
+
+        val file = File(assetsDir, config.callHistory!!.asset)
+        assertEquals(97_310, file.length().toInt(), "the packaged history is not upstream's ARRLDXCW_USDX.txt")
+
+        val text = file.readText()
+        val local = assertIs<HistoryLoad.Loaded>(
+            CallHistoryFile.parse(text, config.callHistory!!, "W1AW", data.callFacts),
+        ).history
+        val dx = assertIs<HistoryLoad.Loaded>(
+            CallHistoryFile.parse(text, config.callHistory!!, "DL1AA", data.callFacts),
+        ).history
+
+        // Measured on the shipped file: 8 357 data rows — 3 781 carry a power (the DX stations a
+        // W/VE operator works) and 4 576 carry a state (the W/VE stations a DX operator works).
+        // No row carries both, so the two pools are disjoint and add up to the whole file.
+        assertEquals(3_781, local.size, "unexpected W/VE-side pool size")
+        assertEquals(4_576, dx.size, "unexpected DX-side pool size")
+        assertTrue(local.calls.intersect(dx.calls).isEmpty(), "the two sides share a station")
+        assertEquals(8_357, local.size + dx.size, "a data row went missing")
+
+        // One column per side and the other one empty: that is what makes `getExch2` =
+        // `State + Power` (`ArrlDx.pas:320-323`) equal to the one piece the station sends.
+        assertTrue(local.calls.all { local.recordFor(it)?.get("power").orEmpty().isNotEmpty() })
+        assertTrue(local.calls.all { local.recordFor(it)?.get("state").orEmpty().isEmpty() })
+        assertTrue(dx.calls.all { dx.recordFor(it)?.get("state").orEmpty().isNotEmpty() })
+        assertTrue(dx.calls.all { dx.recordFor(it)?.get("power").orEmpty().isEmpty() })
+        assertEquals("100", local.recordFor("3V8SS")?.get("power"))
+        assertEquals("500", local.recordFor("3W9A")?.get("power"))
+        assertEquals("MN", dx.recordFor("AA0AC")?.get("state"))
+        // The file's second `!!Order!!` line announces the US section; it is a header, not a call.
+        assertNull(local.recordFor("!!ORDER!!"), "the section header was parsed as a station")
+        assertNull(dx.recordFor("!!ORDER!!"), "the section header was parsed as a station")
+
+        // The W/VE side's multiplier is `callCountry(theirCall)`, and the engine fails closed: an
+        // unresolved call scores 0 instead of upstream's 3 points and no multiplier
+        // (`ArrlDx.pas:353-355`). Measured: three calls in 3 781 — this is the number the ticket
+        // records (ADR-0017 §7).
+        val unresolved = local.calls.filter { data.callFacts.country(it) == null }.toSet()
+        assertEquals(setOf("D1A", "D1DX", "LU1AW/D"), unresolved)
+
+        // The whole chain the device uses: packaged bytes → the config's own filter spec →
+        // the roster's exchange, on both sides of the contest.
+        val localRoster = StationRoster(
+            config = config,
+            pool = local,
+            history = local,
+            settings = RosterSettings(speedWpm = 25),
+            seed = 20_261_020L,
+            calls = data.callFacts,
+        )
+        repeat(StationRoster.MAX_STATIONS) { localRoster.add() }
+        assertEquals(StationRoster.MAX_STATIONS, localRoster.size)
+        localRoster.stations.forEach { station ->
+            val record = assertNotNull(local.recordFor(station.call), station.call)
+            assertEquals("599", station.exchange.exch1, "ArrlDx.pas:315 the station's RST is 599")
+            assertEquals(record["power"], station.exchange.exch2, station.call)
+        }
+
+        val dxRoster = StationRoster(
+            config = config,
+            pool = dx,
+            history = dx,
+            settings = RosterSettings(speedWpm = 25),
+            seed = 20_261_020L,
+            calls = data.callFacts,
+        )
+        repeat(StationRoster.MAX_STATIONS) { dxRoster.add() }
+        assertEquals(StationRoster.MAX_STATIONS, dxRoster.size)
+        dxRoster.stations.forEach { station ->
+            val record = assertNotNull(dx.recordFor(station.call), station.call)
+            assertEquals("599", station.exchange.exch1)
+            assertEquals(record["state"], station.exchange.exch2, station.call)
+        }
+        // Different sides, different stations: the two rosters cannot draw the same calls.
+        assertTrue(
+            localRoster.stations.map { it.call }.toSet()
+                .intersect(dxRoster.stations.map { it.call }.toSet()).isEmpty(),
+            "the two sides drew the same station",
+        )
+    }
+
     /** Magnitude of [hz] in [samples] (Goertzel); enough to prove a tone is present. */
     private fun toneAt(samples: FloatArray, frames: Int, hz: Double): Double {        val w = 2.0 * PI * hz / rate
         val coeff = 2.0 * cos(w)

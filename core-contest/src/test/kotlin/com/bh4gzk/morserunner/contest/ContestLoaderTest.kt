@@ -208,4 +208,40 @@ class ContestLoaderTest {
             "scoring.points should read the DXCC identifiers, saw ${config.scoring.points.identifiers()}",
         )
     }
+
+    // --- T17: the call-history row filter ---------------------------------------
+
+    @Test
+    fun `a call history filter compiles against the station properties and its own columns`() {
+        // ARRL DX's station pool depends on which side of the contest the operator is on
+        // (`ArrlDx.pas:157-158`), so a history may declare a per-row predicate. It sees the
+        // row's own columns plus the station properties — `myCountry` is what decides the side.
+        val result = ContestLoader.load(
+            "filtered.json",
+            text("cqww").replace(
+                "\"requiresMyCallInDxcc\": false",
+                "\"requiresMyCallInDxcc\": false, " +
+                    "\"filter\": \"ifElse(myCountry == 'United States of America', zone != '', true)\"",
+            ),
+        )
+        assertIs<LoadResult.Success>(result)
+        val filter = assertNotNull(result.config.callHistory!!.filter, "the filter was dropped")
+        assertEquals(
+            setOf("myCountry", "zone"),
+            filter.identifiers(),
+            "the filter should read the row's column and the operator's country",
+        )
+    }
+
+    @Test
+    fun `a call history filter cannot read the QSO identifiers`() {
+        // A history is loaded before any QSO exists: `theirCall` has no value to bind.
+        val errors = errors("cqww") {
+            it.replace(
+                "\"requiresMyCallInDxcc\": false",
+                "\"requiresMyCallInDxcc\": false, \"filter\": \"theirCall == 'DL1ABC'\"",
+            )
+        }
+        assertHas(errors, "callHistory.filter", "theirCall")
+    }
 }

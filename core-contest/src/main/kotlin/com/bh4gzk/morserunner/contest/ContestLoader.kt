@@ -46,7 +46,7 @@ private val IDENTIFIER = Regex("[A-Za-z_][A-Za-z0-9_]*")
 private val NAMED_GROUP = Regex("\\(\\?<([A-Za-z][A-Za-z0-9]*)>")
 
 /** Station properties the engine resolves before scoring a QSO (spec §4). */
-private val STATION_IDENTIFIERS = setOf("myCall", "myCountry", "myContinent", "myZone", "mySection")
+internal val STATION_IDENTIFIERS = setOf("myCall", "myCountry", "myContinent", "myZone", "mySection")
 
 /**
  * Constants whose value is a **shared data asset** (spec §9), resolved from
@@ -225,7 +225,10 @@ private class Loader(private val source: String) {
         val path = "callHistory"
         onlyKeys(
             obj, path,
-            setOf("asset", "delimiter", "skipPrefixes", "header", "minFields", "columns", "dedupe", "requiresMyCallInDxcc"),
+            setOf(
+                "asset", "delimiter", "skipPrefixes", "header", "minFields", "columns", "dedupe",
+                "requiresMyCallInDxcc", "filter",
+            ),
         )
         val mark = errors.size
         val asset = obj.str("asset", path) ?: ""
@@ -240,8 +243,16 @@ private class Loader(private val source: String) {
         val dedupe = obj.bool("dedupe", path, required = false) ?: false
         val requiresMyCallInDxcc = obj.bool("requiresMyCallInDxcc", path, required = false) ?: false
         if (columns.isEmpty()) error(child(path, "columns"), "at least one column is required")
+        // T17: the row predicate sees the history's own cells and the station properties — a
+        // history is read before any QSO, so `theirCall`/`theirExch*` have nothing to bind.
+        val filter = obj.str("filter", path, required = false)?.let {
+            compile(it, child(path, "filter"), columns.map { it.name }.toSet() + STATION_IDENTIFIERS)
+        }
         return if (errors.size == mark) {
-            CallHistory(asset, delimiter, skipPrefixes, header, minFields, columns, dedupe, requiresMyCallInDxcc)
+            CallHistory(
+                asset, delimiter, skipPrefixes, header, minFields, columns, dedupe,
+                requiresMyCallInDxcc, filter,
+            )
         } else {
             null
         }

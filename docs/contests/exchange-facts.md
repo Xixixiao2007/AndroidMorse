@@ -256,6 +256,30 @@ turns the port's product into upstream's sum contact for contact. The weight is 
 **same alphabet the keyer sends** (`:core-morse`, shared with `:core-audio`), so the score cannot
 drift from the audio.
 
+## ARRL DX CW — `ArrlDx.pas` (T17, the eighth per-contest ticket — the first with a two-sided pool)
+
+| | |
+|---|---|
+| contest class | `TArrlDx : TDualExchContest` (`ArrlDx.pas:57-61`), constructed `(etRST, etStateProv)` local and `(etRST, etPower)` DX |
+| **the split** | `HomeCallIsLocal` = my DXCC entity is `United States of America` or `Canada` (`ArrlDx.pas:196-213`; prefix best-guess `A`/`K`/`N`/`W`/`VE` + an error string when the lookup fails, `:204-208`) |
+| who I work | **W/VE → DX stations only** (rows with a power); **DX → W/VE stations only** (rows with a state) — `ArrlDx.pas:157-158`, applied while the history loads |
+| call history | `ARRLDXCW_USDX.txt` — header-driven, two `!!Order!!` sections, columns `call,name,state,power,usertext`; 8 357 data rows, **3 781** with a power and **4 576** with a state, none with both |
+| my exchange | `etRST` + `etStateProv` **or** `etPower`, `ExchFieldEditable: True`, default `5NN ON` (`Ini.pas:157-164`) — one box whose *meaning* follows my side; the typed value is `Me.Exch2` on both sides (`Main.pas:1548`) |
+| DX Exch1 | the literal `'599'` (`ArrlDx.pas:311-315`) |
+| DX Exch2 | `State + Power` (`ArrlDx.pas:320-323`) — every row fills exactly one, so the sum is the piece the station sends |
+| **points** | **3**, unconditionally (`ArrlDx.pas:351` `Qso^.Points := 3`) |
+| **multiplier** | **W/VE**: the worked station's DXCC **entity** (`:352-355`); **DX**: the worked station's **state/province** (`:359`) |
+| `FindCallRec` | also consults `HomeCallIsLocal` (`:286`): a DX caller shows its `Continent/Entity` in the station line |
+| messages | none — `ArrlDx.pas` overrides the *station's* exchange, not `SendMsg` |
+| capability flags | `TDualExchContest`/`TArrlDx` set no Farnsworth flag; the contest genuinely needs my DXCC entity, which is why the port declares `requiresMyDxcc: true` |
+
+Implemented in `contests/arrldx.json` (ADR-0017). It is the series' first contest whose **station
+pool is filtered by the operator's side** — the file carries both columns and upstream drops the
+half this operator cannot work — which is why the schema gained `callHistory.filter`, a per-row
+predicate over the row's cells and the station properties. The sent piece is *not* a conditional:
+upstream types one box and sends it either way, so the document's `sent.exch2` is the field itself.
+The multiplier is one `ifElse` over `myCountry`, an identifier `scoring` already had.
+
 ### Data inventory for the remaining per-contest tickets (verified 2026-10-20)
 
 | Asset | Used by | State |
@@ -263,7 +287,7 @@ drift from the audio.
 | `CQWWCW.txt` / `SSCW.txt` / `IARU_HF.txt` | CQ WW / ARRL SS / IARU HF | packaged (T3/T6) |
 | `NAQPCW.txt` | NCJ NAQP | packaged (T10) |
 | `K1USNSST.txt` | K1USN SST | packaged (T11) — `call,name,qth`; multiplier is the QTH, or the DXCC entity when the QTH is `DX` (`CWSST.pas:326-330`) |
-| `ARRLDXCW_USDX.txt` | ARRL DX (`ArrlDx.pas`) | **not packaged** — needs the my-exchange branch (§1 of ADR-0010) |
+| `ARRLDXCW_USDX.txt` (8 369 lines, two `!!Order!!` sections: `call,name,state,power,usertext`) | ARRL DX (`ArrlDx.pas`) | packaged (T17) — 8 357 data rows: 3 781 carry a **power** (the DX stations a W/VE operator works) and 4 576 carry a **state** (the W/VE stations a DX operator works), the split upstream applies in `ArrlDx.pas:157-158`; the pool is the file **filtered by my side** (`callHistory.filter`) |
 | `JARL_ALLJA.TXT` (2 542 lines, `call,exch1[,usertext]`, `#` banner) | JARL ALL JA (`AllJa.pas:72-100`) | packaged (T12) — RST `599` + `<pref><power>`; no serial; 1 point; multiplier = `Exch2` minus a trailing `L/M/H/P` (`:190-207`) |
 | `JARL_ACAG.TXT` (2 551 lines, `call,exch1[,usertext]`, `#` banner) | JARL ACAG (`Acag.pas:72-100`) | packaged (T13) — RST `599` + `<city\|gun\|ku><power>`; no serial; 1 point; multiplier = `Exch2` minus a trailing `L/M/H/P` (`:191-207`), a **string** so leading zeros survive |
 | `CWOPS.LIST` (6 344 lines, header-driven `!!Order!!,Call,Name,Exch1,UserText`) | CWops CWT (`CwOps.pas:74`) | packaged (T14) — name + CWT number/state/country from the file; 1 point; multiplier = **the worked call**; no serial |

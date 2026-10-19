@@ -3,6 +3,9 @@ package com.bh4gzk.morserunner.contest
 import com.bh4gzk.morserunner.data.CallPool
 import com.bh4gzk.morserunner.data.Callsign
 import com.bh4gzk.morserunner.expr.CallFacts
+import com.bh4gzk.morserunner.expr.DEFAULT_STEP_BUDGET
+import com.bh4gzk.morserunner.expr.EvalResult
+import com.bh4gzk.morserunner.expr.Value
 
 /** Loading a contest's call history either produced a lookup or says why it refused. */
 sealed interface HistoryLoad {
@@ -38,6 +41,12 @@ sealed interface HistoryLoad {
  * record has to keep `state = ""`. A row that does not have the cell at all still yields no
  * column, a required column still rejects an empty value, and non-TEXT columns keep skipping
  * empties — otherwise IARU HF's empty sections would start passing its required-column gate.
+ *
+ * **The pool itself can depend on the operator** (T17). `callHistory.filter` is a per-row
+ * predicate over the row's cells and the station properties; a row it rejects never enters the
+ * pool, the same way upstream's `continue` leaves it out of `ArrlDxCallList`
+ * (`ArrlDx.pas:157-158`). Unlike a skipped row, a predicate that *cannot* be evaluated is
+ * [HistoryLoad.Rejected] — an empty pool must say why it is empty, not look like a contest.
  */
 class CallHistoryFile private constructor(
     private val records: Map<String, Map<String, String>>,
@@ -101,6 +110,12 @@ class CallHistoryFile private constructor(
             val headerIndices = HashMap<String, Int>()
             var headerSeen = spec.header == null
             val duplicates = if (spec.dedupe) HashSet<String>() else null
+            // T17: the row predicate. The station properties are bound once — the file is read
+            // once — and each row overwrites only the cell names it declares.
+            val filter = spec.filter
+            val filterEnvironment = filter?.let {
+                LinkedHashMap<String, Value>().apply { putAll(stationValues(myCall, calls)) }
+            }
 
             for (raw in text.lineSequence()) {
                 val line = raw.trimEnd('\r')
@@ -124,6 +139,28 @@ class CallHistoryFile private constructor(
                 val record = readRecord(fields, spec, if (spec.header != null) headerIndices else null)
                     ?: continue
                 val call = record[CALL_COLUMN] ?: continue
+                if (filter != null && filterEnvironment != null) {
+                    for (column in spec.columns) {
+                        // A declared column a shorter row does not carry reads as empty: the
+                        // predicate is about what the cells say, not about the row's width.
+                        filterEnvironment[column.name] = Value.str(record[column.name] ?: "")
+                    }
+                    val verdict = when (val result = filter.evaluate(filterEnvironment, DEFAULT_STEP_BUDGET, calls)) {
+                        // Fail closed and loudly: a predicate that cannot be evaluated would
+                        // silently empty the pool, and an empty pool is not a contest.
+                        is EvalResult.Failure -> return HistoryLoad.Rejected(
+                            "call history '${spec.asset}': the filter cannot be evaluated for " +
+                                "'$call': ${result.error.render()}",
+                        )
+                        is EvalResult.Success -> result.value
+                    }
+                    val keep = (verdict as? Value.Bool)?.value
+                        ?: return HistoryLoad.Rejected(
+                            "call history '${spec.asset}': the filter produced ${verdict.typeName}, " +
+                                "expected a boolean",
+                        )
+                    if (!keep) continue
+                }
                 if (duplicates != null && !duplicates.add(call)) continue
                 records[call] = record
             }
@@ -137,6 +174,24 @@ class CallHistoryFile private constructor(
         }
 
         internal const val CALL_COLUMN: String = "call"
+
+        /**
+         * The spec §4 station properties, as the row filter sees them (T17).
+         *
+         * The loader's `STATION_IDENTIFIERS` is the allowed set; this is the same five names
+         * with the operator's values. A property the DXCC table cannot answer is simply
+         * **absent**, so a filter that reads it fails closed per row instead of comparing
+         * against a guess (upstream's `ArrlDx.pas:204-208` best-guesses a prefix instead).
+         */
+        private fun stationValues(myCall: String, calls: CallFacts): Map<String, Value> = buildMap {
+            if (myCall.isNotBlank()) {
+                put("myCall", Value.str(myCall))
+                calls.country(myCall)?.let { put("myCountry", Value.str(it)) }
+                calls.continent(myCall)?.let { put("myContinent", Value.str(it)) }
+                calls.zone(myCall)?.let { put("myZone", Value.num(it)) }
+                calls.arrlSection(myCall)?.let { put("mySection", Value.str(it)) }
+            }
+        }
 
         /** Maps our column names to the indices the file's `!!Order!!` line declares. */
         private fun readHeader(line: String, spec: CallHistory, header: HeaderSpec): Map<String, Int>? {

@@ -69,7 +69,7 @@ class AcagTest {
         val bundled = ContestLibrary.bundled()
         assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
         assertEquals(
-            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx", "hst"),
+            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops", "cqwpx", "hst", "arrldx"),
             bundled.configs.map { it.id },
         )
         assertEquals(ContestConfig.SUPPORTED_SCHEMA_VERSION, acag.schemaVersion)
