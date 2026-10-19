@@ -28,4 +28,10 @@ This workspace runs Matt Pocock's AI-coding workflow (ask-matt).
 - **One Gradle at a time**: all sessions share this working tree and its `.gradle/` locks.
   Two concurrent builds wait on each other or fail with a lock timeout, so stagger them.
   Parallel *sessions* are fine only when their file scopes are disjoint (e.g. `core-expr` vs
-  `core-audio`); commits stay separate.
+  `core-audio`); commits stay separate. If Kotlin does start emitting bogus errors
+  (`IC_FAILED_TO_CLOSE_CACHES`, then phantom `Unresolved reference`), rerun with
+  `-Pkotlin.incremental=false` and delete the affected module's `build/` directory.
+- **Evidence check**: before calling a ticket green, run `python tools/verify-tests.py`
+  (`--strict` when skips would be surprising). It prints per-suite counts and fails on any
+  failure/error. A skipped test is not evidence — this exists because three tests were silently
+  skipped once and looked green.
