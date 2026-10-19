@@ -5,19 +5,7 @@
   "duration": { "default": 30, "min": 1, "max": 60 },
   "runModes": ["single-call", "pile-up"],
   "constants": {
-    "arrlSections": [
-      "CO", "IA", "KS", "MN", "MO", "ND", "NE", "SD",
-      "CT", "EMA", "ME", "NH", "RI", "VT", "WMA",
-      "ENY", "NLI", "NNJ", "NNY", "SNJ", "WNY",
-      "DE", "EPA", "MDC", "WPA",
-      "AL", "GA", "KY", "NC", "NFL", "SC", "SFL", "TN", "VA", "WCF", "PR", "VI",
-      "AR", "LA", "MS", "NM", "NTX", "OK", "STX", "WTX",
-      "EB", "LAX", "ORG", "SB", "SCV", "SDG", "SF", "SJV", "SV", "PAC",
-      "AK", "AZ", "EWA", "ID", "MT", "NV", "OR", "UT", "WWA", "WY",
-      "MI", "OH", "WV",
-      "IL", "IN", "WI",
-      "AB", "BC", "GH", "MB", "NB", "NL", "NS", "ONE", "ONN", "ONS", "PE", "QC", "SK", "TER"
-    ]
+    "arrlSections": { "asset": "arrlSections" }
   },
   "exchange": {
     "myFields": [

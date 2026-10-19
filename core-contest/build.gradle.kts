@@ -12,5 +12,10 @@ dependencies {
     // (the app, the QSO engine) must see those types too.
     api(project(":core-expr"))
 
+    // Shared data assets: the loader resolves a constant that names one (the ARRL
+    // section table, spec §9), and the station roster receives the MASTER.DTA pool.
+    // `api`: the roster and CallFacts expose MasterDta/DxccList in their signatures.
+    api(project(":core-data"))
+
     testImplementation(kotlin("test-junit"))
 }

@@ -1,5 +1,6 @@
 package com.bh4gzk.morserunner.contest
 
+import com.bh4gzk.morserunner.data.ArrlSections
 import com.bh4gzk.morserunner.expr.CompileResult
 import com.bh4gzk.morserunner.expr.Expression
 import com.bh4gzk.morserunner.expr.Value
@@ -46,6 +47,19 @@ private val NAMED_GROUP = Regex("\\(\\?<([A-Za-z][A-Za-z0-9]*)>")
 
 /** Station properties the engine resolves before scoring a QSO (spec §4). */
 private val STATION_IDENTIFIERS = setOf("myCall", "myCountry", "myContinent", "myZone", "mySection")
+
+/**
+ * Constants whose value is a **shared data asset** (spec §9), resolved from
+ * `core-data` instead of being copied into the contest document.
+ *
+ * The ARRL/RAC section table is the first one: keeping 85 strings in `arrlss.json`
+ * while `ArrlSections.all` ships the same 85 was T3's one open debt. The loader
+ * now injects the asset, and a literal list under one of these names is rejected,
+ * so the second copy cannot come back by accident (ADR-0004 decision 9).
+ */
+private val SHARED_DATA_ASSETS: Map<String, () -> List<String>> = mapOf(
+    "arrlSections" to { ArrlSections.all },
+)
 
 private class Loader(private val source: String) {
 
@@ -157,9 +171,34 @@ private class Loader(private val source: String) {
         obj.entries.forEach { (name, value) ->
             val path = child("constants", name)
             if (!IDENTIFIER.matches(name)) error(path, "'$name' is not a valid identifier")
-            toValue(value, path)?.let { out[name] = it }
+            when {
+                // `{ "asset": "arrlSections" }`: resolve the shared table.
+                value is JsonValue.Obj -> readAssetConstant(value, path)?.let { out[name] = it }
+                // A literal copy under a shared asset's name defeats the single source.
+                name in SHARED_DATA_ASSETS -> error(
+                    path,
+                    "'$name' is a shared data asset (core-data); reference it as " +
+                        "{ \"asset\": \"$name\" } instead of copying it",
+                )
+                else -> toValue(value, path)?.let { out[name] = it }
+            }
         }
         return out
+    }
+
+    /** Resolves `{ "asset": "<id>" }` against [SHARED_DATA_ASSETS] (spec §9, ADR-0004 §9). */
+    private fun readAssetConstant(obj: JsonValue.Obj, path: String): Value.List? {
+        onlyKeys(obj, path, setOf("asset"))
+        val id = obj.str("asset", path) ?: return null
+        val provider = SHARED_DATA_ASSETS[id]
+        if (provider == null) {
+            error(
+                child(path, "asset"),
+                "unknown data asset '$id' (known: ${SHARED_DATA_ASSETS.keys.sorted().joinToString(", ")})",
+            )
+            return null
+        }
+        return Value.list(provider().map { Value.str(it) })
     }
 
     private fun toValue(value: JsonValue, path: String): Value? = when (value) {

@@ -134,7 +134,14 @@ sealed interface TheirBinding {
     /** A column of the call-history record for this station. */
     data class HistoryColumn(val column: String) : TheirBinding
 
-    /** The running serial number the engine keeps. */
+    /**
+     * The serial number the station sends.
+     *
+     * Upstream draws a fresh random serial per station from the contest's
+     * configured range (`DxOper.GetNR` / `SerNRGen`), it is not a session counter;
+     * T5 implements that from the config's `serial` exchange field range. The
+     * engine supplies the value, so the expression stays deterministic.
+     */
     data object Serial : TheirBinding
 }
 

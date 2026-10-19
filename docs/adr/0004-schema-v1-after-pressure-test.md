@@ -58,6 +58,13 @@ v1 did not cover: continent lookup and number→string formatting.
      `exchange.their.exch1/exch2` generation rules. A template cannot express the
      leading-zero perturbation (`CqWW.pas:296-297`), and keeping both would be two sources
      of truth for one string.
+9. **A shared data asset is referenced, never copied (T3 debt, decided in T5).**
+   `constants.arrlSections` is `{ "asset": "arrlSections" }`: the loader resolves the
+   name against `core-data` (`ArrlSections.all`) and injects the list into the
+   expression environment, so the 85 entries exist in exactly one place. A literal list
+   under a known asset name is a load-time error, and so is an unknown asset id — the
+   second copy cannot come back silently. `core-contest` therefore depends on
+   `core-data` (it already depends on `core-expr`).
 
 ## Consequences
 + The three hardest contests are data, not code. Every expression is compiled once at load
@@ -68,18 +75,20 @@ v1 did not cover: continent lookup and number→string formatting.
   extension point ADR-0003 asked for — the count is now four (`str`, `indexOf`, `listAt`,
   `callContinent`), and each one is total and fail-closed.
 − Config authors must respect the §4 environment table; the loader enforces it.
-− **Open, deliberately not decided here:** decision 4 puts the ARRL section table in
-  `arrlss.json` (`constants.arrlSections`), but `core-data.ArrlSections.all` ships the same
-  85 entries plus `neighbourOf(section, roll)` — the two are separate sources of truth. They
-  agree today (checked entry by entry when T3 landed), and nothing enforces that they keep
-  agreeing. T5, which wires `CallFacts` to `core-data`, must pick one: either the schema
-  gains a "constant that names a shared data asset", or the loader cross-checks the
-  constant against the asset. Recorded in `.scratch/progress.md` as T3 debt; not silently
-  resolved during T3 because it is a schema decision, not a pressure-test one.
+− **T3 debt resolved in T5 (2026-10-19):** decision 9 replaces the duplicate table with a
+  reference. The alternative — keep the literal list and have the loader cross-check it
+  against `core-data` — was rejected: it preserves two copies of the same 85 strings, and
+  every ARRL-family contest added by T10–T20 would copy them again. Referencing the asset
+  is also what spec §9 already says (`arrlSections` is a data asset). Guard:
+  `DataAssetConstantTest` fails if the shipped config carries a literal table, and if the
+  loaded constant diverges from `ArrlSections.all`.
 
 ## Rejected
 - A contest-specific `arrlSectionNeighbour()` built-in: puts domain logic in the engine and
   does not generalise to the other nine contests' tables.
+- Keeping the 85-section literal in `arrlss.json` and cross-checking it in the loader
+  (the T3 debt's other option): two copies would still exist, and T10–T20 would multiply
+  them per contest.
 - A `random()` built-in: non-deterministic evaluation, and the draw would be untestable.
 - `printf`-style formatting: `str` + `+` + `ifElse` covers both real uses; a format
   sub-language is a much larger surface for one zero-padding rule.

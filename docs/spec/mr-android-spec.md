@@ -34,13 +34,16 @@ Single Gradle project, modules split by *testability without Android*:
 
 ```
 app/              Compose UI, Activity, audio output, asset loading, persistence
-core-contest/     schema model + loader + expression engine  (pure Kotlin/JVM)
-core-qso/         station roster, QSO state machine, log, scoring  (pure Kotlin/JVM)
+core-contest/     schema model + loader + expression engine + station roster and
+                  their-exchange generation  (pure Kotlin/JVM)
+core-qso/         QSO state machine, log, scoring  (pure Kotlin/JVM)
 core-audio/       Morse timing table, sample synthesis, mixer  (pure Kotlin/JVM except AudioTrack sink)
 ```
 
 `core-*` have **no Android dependencies** so they run as fast JVM unit tests; `app` wires them
-to Compose, `AudioTrack` and `SharedPreferences`.
+to Compose, `AudioTrack` and `SharedPreferences`. The station roster lives in `core-contest`
+because generating a station's exchange evaluates that contest's own compiled expressions
+(T5); the QSO engine in `core-qso` consumes it.
 
 ## 4. Contest configuration (schema v1 — settled by T3)
 
@@ -57,7 +60,10 @@ hardest — are expressible, so the remaining nine are expected to fit (ADR-0004
   "runModes": ["single-call", "pile-up"],               // subset of single-call|pile-up|competition
 
   // Expression constants, injected as identifiers into every evaluation.
-  "constants": { "arrlSections": ["CO", "IA", "…"] },
+  // A shared data asset is referenced, not copied: the loader resolves
+  // { "asset": "arrlSections" } from core-data (spec §9), so the table exists once
+  // (ADR-0004 decision 9).
+  "constants": { "arrlSections": { "asset": "arrlSections" } },
 
   "exchange": {
     // What the operator types. type ∈ rst|int|serial|enum|check|text.
@@ -143,6 +149,8 @@ The loader rejects a document — naming the file, the field and the `line:col` 
 offending JSON or expression:
 
 - JSON syntax, wrong type, unknown field, missing required field, bad enum value;
+- a constant that copies a shared data asset instead of referencing it, or names an
+  unknown asset;
 - expression compile errors: syntax, unknown function, arity, literal regex
   (`ExprError.render()`);
 - an identifier outside the environment table above;
