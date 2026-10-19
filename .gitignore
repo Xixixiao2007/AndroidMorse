@@ -1,0 +1,6 @@
+# Ignore third-party reference clones and scratch
+upstream/
+.scratch/*
+!/.scratch/.gitkeep
+node_modules/
+*.log
