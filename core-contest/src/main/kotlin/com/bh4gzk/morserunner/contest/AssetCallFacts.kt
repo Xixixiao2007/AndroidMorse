@@ -29,10 +29,11 @@ import com.bh4gzk.morserunner.expr.CallFacts
  *    *table* still ships — as `constants.arrlSections`, resolved from `core-data`
  *    (ADR-0004 decision 9).
  *
- * Known fidelity gap (recorded in `.scratch/progress.md`): upstream's
- * `TDXCC.FindRec` hard-codes two prefix special cases (KG4 Guantanamo/US and the
- * CE9/KC4 Antarctica aliases); `core-data.DxccList` does not, and neither does
- * this class yet.
+ * The record comes from [DxccList.find], which is upstream's `TDXCC.FindRec`: it
+ * extracts the DXCC-mode prefix and applies the two hard-coded rewrites
+ * (KG4 2x1/2x3 calls are US while 2x2 stays Guantanamo; CE9/KC4 become the
+ * CE9KC4 Antarctica row, `DXCC.pas:136-170`). Without those rewrites the table
+ * answers wrongly for real KG4 and Antarctic calls.
  */
 class AssetCallFacts(private val dxcc: DxccList) : CallFacts {
 
@@ -49,8 +50,5 @@ class AssetCallFacts(private val dxcc: DxccList) : CallFacts {
     /** No call → section mapping exists; see the class KDoc. */
     override fun arrlSection(call: String): String? = null
 
-    private fun record(call: String): DxccRecord? {
-        val prefix = CallPrefix.extractPrefix(call, deleteTrailingLetters = false)
-        return if (prefix.isEmpty()) null else dxcc.lookup(prefix)
-    }
+    private fun record(call: String): DxccRecord? = dxcc.find(call)
 }

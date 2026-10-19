@@ -37,6 +37,9 @@ class AssetCallFactsTest {
         DL;(D[A-R])|(Y[2-9]);Fed. Rep. of Germany;EU;28;14;230
         VE;VE;Canada;NA;4;3,4,5;001
         ZL;ZL;New Zealand;OC;60;32;170
+        KG4;KG4;Guantanamo Bay;NA;11;8;105
+        CE9;CE9;South Shetland Is.;SA;73;13;241
+        CE9KC4;CE9KC4|FT8Y|RI1AN;Antarctica;AN;67;12,13,29,30;013
     """.trimIndent()
 
     private val dxcc = DxccList.parse(table)
@@ -88,6 +91,18 @@ class AssetCallFactsTest {
         assertNull(facts.zone("W1AW"))
         assertNull(facts.zone("VE3ABC"))
         assertNull(facts.zone("ZZ9ZZZ"))
+    }
+
+    @Test
+    fun `upstream's hard-coded DXCC rewrites are applied`() {
+        // DxccList.find is DXCC.pas:136-170: without these rewrites the table maps
+        // KG4 2x3 calls to Guantanamo Bay and CE9/KC4 to the wrong entity.
+        assertEquals("United States of America", facts.country("KG4ABC")) // 2x3 is US
+        assertEquals("United States of America", facts.country("KG4A"))   // 2x1 is US
+        assertEquals("Guantanamo Bay", facts.country("KG4AA"))            // 2x2 stays KG4
+        assertEquals("Antarctica", facts.country("CE9/W7SST"))
+        assertEquals("Antarctica", facts.country("KC4/W7SST"))
+        assertEquals("Antarctica", facts.country("KC4AAA"))
     }
 
     @Test
