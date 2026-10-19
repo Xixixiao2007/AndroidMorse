@@ -52,7 +52,7 @@
     ]
   },
   "callHistory": {
-    "asset": "SSCW.TXT",
+    "asset": "SSCW.txt",
     "delimiter": ",",
     "skipPrefixes": ["!!Order!!"],
     "minFields": 4,

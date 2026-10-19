@@ -60,7 +60,7 @@ class ContestLoaderTest {
 
     @Test
     fun `rejects a missing required field`() {
-        val errors = errors("cqww") { it.replace("    \"asset\": \"CQWWCW.TXT\",\n", "") }
+        val errors = errors("cqww") { it.replace("    \"asset\": \"CQWWCW.txt\",\n", "") }
         assertHas(errors, "callHistory.asset", "missing required string")
     }
 

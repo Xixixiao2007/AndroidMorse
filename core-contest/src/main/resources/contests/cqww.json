@@ -34,7 +34,7 @@
     ]
   },
   "callHistory": {
-    "asset": "CQWWCW.TXT",
+    "asset": "CQWWCW.txt",
     "delimiter": ",",
     "skipPrefixes": ["!!Order!!", "#"],
     "minFields": 3,

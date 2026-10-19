@@ -48,6 +48,11 @@ it actually sent (upstream's `TrueCall`/`TrueExch1`/`TrueExch2`, filled by
 `TDxStation.DataToLastQso`). `app` maps whatever the roster exposes onto it. Benefit beyond
 decoupling: the engine's tests need no call-history asset to exercise a contact.
 
+> **Refinement (ADR-0006 §4, same ticket):** the two-field mapping now also exists in
+> `core-qso` as `RosterStation.asTruth()`, so a JVM test can prove
+> config → roster → operator → log → score without an APK. It is still a target type, not a
+> dependency of the state machine; `app` may use either.
+
 This is also why verdicts are computed against `QsoTruth` rather than by asking the roster:
 the comparison belongs to the QSO engine, the generation belongs to the roster.
 
