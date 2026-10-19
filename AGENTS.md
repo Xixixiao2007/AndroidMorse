@@ -19,6 +19,10 @@ This workspace runs Matt Pocock's AI-coding workflow (ask-matt).
 - Do not make credentials, callsigns, or personal data part of committed source.
 
 ## Session conventions
+- **Autonomy**: the human delegated decisions on 2026-10-19 — "不需要我同意，你们爱怎么做怎么做",
+  "如果有选择题，自动选最优解". Do not block on questions: pick the best option, write the
+  reasoning into the ADR/commit/progress snapshot, and keep moving. Verification discipline is
+  unchanged — delegation covers choices, not evidence.
 - **Model**: new sessions should use `DeepSeek-V4.1-Flash` (the name with the decimal point);
   never switch the model of a session that is already open (operator instruction, 2026-10-19).
 - **One Gradle at a time**: all sessions share this working tree and its `.gradle/` locks.

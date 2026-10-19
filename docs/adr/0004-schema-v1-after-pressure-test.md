@@ -1,11 +1,14 @@
 # ADR-0004 — Schema v1 and four language extension points, after the pressure test
 
-- Status: **proposed** — awaiting human review (drafted 2026-10-19 for T3)
-- Deciders: agent. **The human has not reviewed this yet**; an earlier draft of this file
-  wrongly recorded it as accepted by the human, which was corrected.
+- Status: **accepted by delegation** — the human delegated decision-making on 2026-10-19
+  ("不需要我同意，你们爱怎么做怎么做" / "如果有选择题，自动选最优解"), so the agent decides and
+  records the reasoning here instead of waiting for review. T3's exit evidence still has to
+  prove the three contests load, validate and score; until then spec §4 stays provisional.
+- Deciders: agent, under that delegation. An earlier draft recorded the human as a decider
+  before they had seen the file; that was wrong and is corrected.
 - Scope note: revising the schema during T3 is pre-authorised by spec §4:94-96 ("If a contest
   cannot be expressed, revise the schema now"). The four new built-ins and the two schema
-  corrections below are the parts that need a human eye, per ADR-0003's "explicit, reviewable
+  corrections below are recorded here for reviewability, per ADR-0003's "explicit, reviewable
   extension point" rule.
 
 ## Context
