@@ -3,6 +3,7 @@ package com.bh4gzk.morserunner.session
 import com.bh4gzk.morserunner.audio.FadeSchedule
 import com.bh4gzk.morserunner.audio.MorseEncoder
 import com.bh4gzk.morserunner.audio.MorseTiming
+import com.bh4gzk.morserunner.audio.Receiver
 import com.bh4gzk.morserunner.contest.BehaviourProfile
 import com.bh4gzk.morserunner.contest.ContestConfig
 import com.bh4gzk.morserunner.contest.RosterSettings
@@ -70,6 +71,16 @@ data class QrmCue(
     val level: Double,
     val durationMs: Long,
 )
+
+/**
+ * The RIT offset a cue is played with.
+ *
+ * Upstream subtracts the RIT term inside the station loop (`Contest.pas:721-731`) and mixes the
+ * operator's own sidetone in afterwards, so **every received station moves and my own sending
+ * does not**. That distinction is the whole of RIT in a port with no baseband: the audio layer
+ * asks this function instead of deciding it, and the self-monitor is "the cue with no station".
+ */
+fun AudioCue.receiveOffsetHz(ritHz: Int): Int = if (station == null) 0 else ritHz
 
 /**
  * Everything the screen draws, recomputed from the engine on demand.
@@ -144,6 +155,12 @@ class SessionController private constructor(
     private val script: MessageScript,
     private val myCall: String,
     private val speedWpm: Int,
+    /** The operator's receive pitch: the roster's centre and the QRM's reference (`RosterSettings`). */
+    private val pitchHz: Int,
+    /** The contest length the operator asked for; the contest's own range clamps it. */
+    private val durationMinutes: Int,
+    /** Whether interfering stations are scheduled at all (upstream `Ini.Qrm`). */
+    private val qrmEnabled: Boolean,
     private val startMs: Long,
     private val seed: Long,
     private val log: QsoLog,
@@ -151,8 +168,11 @@ class SessionController private constructor(
 ) {
 
     companion object {
-        /** Default keying speed (upstream `Ini.Wpm`; settings arrive with T9). */
+        /** Default keying speed (upstream `Ini.Wpm`). */
         const val DEFAULT_SPEED_WPM: Int = 25
+
+        /** Upstream `Ini.Duration` (`Ini.pas:263`); the settings screen owns it from T9. */
+        const val DEFAULT_DURATION_MINUTES: Int = 30
 
         /** How long a freshly added station waits before calling CQ. */
         const val CQ_LEAD_MS: Long = 2_000L
@@ -170,7 +190,7 @@ class SessionController private constructor(
         private const val ARRL_SS: String = "arrlss"
 
         /** The operator's pitch before T9's settings speak — `RosterSettings.pitchHz`'s default. */
-        const val DEFAULT_PITCH_HZ: Int = 600
+        const val DEFAULT_PITCH_HZ: Int = Receiver.DEFAULT_PITCH_HZ
 
         /**
          * The first interfering station waits this long (`Contest.pas:695` skips the opening
@@ -202,6 +222,11 @@ class SessionController private constructor(
          *   call-history file, or the T5 stand-in when the contest has none.
          * @param autocompleteCalls the calls the entry box may complete from; empty when no
          *   call history is available.
+         * @param durationMinutes the contest length in minutes — the operator's setting, clamped
+         *   to the contest's own `duration` range. Defaults to the contest's declared default,
+         *   which is the fallback for a caller with no preference.
+         * @param qrm whether interfering stations are scheduled (upstream `Ini.Qrm`); when off,
+         *   the QRM clock is parked at `Long.MAX_VALUE` instead of drawing an episode.
          */
         fun start(
             config: ContestConfig,
@@ -216,8 +241,10 @@ class SessionController private constructor(
             speedWpm: Int = DEFAULT_SPEED_WPM,
             stationsOnAir: Int = 1,
             pitchHz: Int = DEFAULT_PITCH_HZ,
+            durationMinutes: Int = config.duration.defaultMinutes,
             lids: Boolean = true,
             flutter: Boolean = true,
+            qrm: Boolean = true,
             log: QsoLog = QsoLog(),
         ): SessionController {
             val rules = ContestRules(config, MyStation(myCall, myExchange), calls)
@@ -248,6 +275,9 @@ class SessionController private constructor(
                 script = MessageScript(rules.operator, config.messages),
                 myCall = myCall,
                 speedWpm = speedWpm,
+                pitchHz = pitchHz,
+                durationMinutes = durationMinutes,
+                qrmEnabled = qrm,
                 startMs = startMs,
                 seed = seed,
                 log = log,
@@ -307,7 +337,8 @@ class SessionController private constructor(
     private var qrmSendEndsAt: Long? = null
 
     /** When the next transmission (or the next episode) is due. */
-    private var qrmNextAt: Long = startMs + QRM_FIRST_MS
+    private var qrmNextAt: Long =
+        if (qrmEnabled) startMs + QRM_FIRST_MS else Long.MAX_VALUE
 
     private val qrmCues = ArrayDeque<QrmCue>()
 
@@ -640,7 +671,7 @@ class SessionController private constructor(
         // ever did, the session would stop making stations long before the QRM noticed.
         qrm = QrmStation.create(
             random = qrmRandom,
-            basePitchHz = DEFAULT_PITCH_HZ,
+            basePitchHz = pitchHz,
             hisCall = myCall,
             pool = pool,
         )
@@ -725,6 +756,9 @@ class SessionController private constructor(
         fillStations()
     }
 
+    /** The log's accepted contacts, in order — what a resume has to replay (T9, F10). */
+    fun loggedRecords(): List<QsoRecord> = log.qsos
+
     private fun fillStations() {
         while (roster.size < stationsOnAir) {
             val added = runCatching { roster.add() }.getOrNull() ?: break
@@ -766,7 +800,17 @@ class SessionController private constructor(
 
     private fun elapsedMs(): Long = (lastNowMs - startMs).coerceAtLeast(0)
 
-    private fun durationMs(): Long = config.duration.defaultMinutes * 60_000L
+    /**
+     * The contest length in minutes after the contest's own range has clamped the setting.
+     *
+     * Schema v1 gives each contest a `duration` block (spec §4); the operator's setting is what
+     * it is applied to, so a 240-minute preference in a 60-minute contest is a 60-minute contest
+     * rather than a session that never ends.
+     */
+    private fun effectiveDurationMinutes(): Int =
+        durationMinutes.coerceIn(config.duration.minMinutes, config.duration.maxMinutes)
+
+    private fun durationMs(): Long = effectiveDurationMinutes() * 60_000L
 
     private fun remainingMs(): Long = (durationMs() - elapsedMs()).coerceAtLeast(0)
 

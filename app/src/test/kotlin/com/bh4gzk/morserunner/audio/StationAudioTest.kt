@@ -88,6 +88,19 @@ class StationAudioTest {
     }
 
     @Test
+    fun `RIT moves a received station's tone, and only by the value it is given`() {
+        // `Contest.pas:721-731`: the RIT term is in the station loop, so a received station
+        // moves and the operator's own sidetone (which the caller passes `ritHz = 0` for,
+        // see `AudioCue.receiveOffsetHz`) does not.
+        val fade = FadeProfile(0.3, flutter = false)
+        assertEquals(640.0, audio.voice(station(fade), 1, "CQ TEST", 7).pitchHz, "the default must not shift")
+        assertEquals(690.0, audio.voice(station(fade), 2, "CQ TEST", 7, ritHz = 50).pitchHz)
+        assertEquals(590.0, audio.voice(station(fade), 3, "CQ TEST", 7, ritHz = -50).pitchHz)
+        // A station that sits off the operator's pitch keeps its own offset.
+        assertEquals(1_140.0, audio.voice(station(fade), 4, "CQ TEST", 7, ritHz = 500).pitchHz, 1e-9)
+    }
+
+    @Test
     fun `the same station and seed fade the same way`() {
         val fade = FadeProfile(0.2, flutter = false)
         val first = audio.voice(station(fade), 1, "CQ TEST", 99).gainTargets!!

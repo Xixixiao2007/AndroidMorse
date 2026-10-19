@@ -23,8 +23,17 @@ class StationAudio(val sampleRate: Int = 48_000) {
      * @param id the mixer slot identifier, used to stop this station later.
      * @param rootSeed the session's seed; the per-station fade stream is derived from it
      *   and the callsign, so two stations never fade together.
+     * @param ritHz the operator's receive offset (spec §11 T9). Every received station's tone
+     *   moves by it (`Contest.pas:721-731`); a caller passing the self-monitor must pass `0`,
+     *   which is what `AudioCue.receiveOffsetHz` decides.
      */
-    fun voice(station: RosterStation, id: Int, text: String, rootSeed: Long): CwVoice {
+    fun voice(
+        station: RosterStation,
+        id: Int,
+        text: String,
+        rootSeed: Long,
+        ritHz: Int = 0,
+    ): CwVoice {
         val envelope = envelope(text, station.speedWpm)
         val random = SeededRandom(FadeSchedule.seedFor(rootSeed, station.call))
         val targets = FadeSchedule.generate(
@@ -35,7 +44,7 @@ class StationAudio(val sampleRate: Int = 48_000) {
 
         return CwVoice(
             id = id,
-            pitchHz = station.pitchHz.toDouble(),
+            pitchHz = Receiver.receivedPitchHz(station.pitchHz, ritHz),
             envelope = envelope,
             level = station.level,
             gainTargets = targets,

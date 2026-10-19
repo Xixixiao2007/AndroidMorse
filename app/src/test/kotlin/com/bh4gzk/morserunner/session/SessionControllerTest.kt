@@ -12,6 +12,7 @@ import com.bh4gzk.morserunner.expr.CallFacts
 import com.bh4gzk.morserunner.qso.QrmStation
 import com.bh4gzk.morserunner.qso.QsoMessage
 import com.bh4gzk.morserunner.qso.QsoState
+import com.bh4gzk.morserunner.settings.SessionSettings
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -54,6 +55,10 @@ class SessionControllerTest {
         history: CallHistoryFile = oneCall,
         seed: Long = 7L,
         flutter: Boolean = true,
+        speedWpm: Int = SessionController.DEFAULT_SPEED_WPM,
+        pitchHz: Int = SessionController.DEFAULT_PITCH_HZ,
+        durationMinutes: Int = SessionSettings.DEFAULT_DURATION_MINUTES,
+        qrm: Boolean = true,
     ): SessionController = SessionController.start(
         config = cqww,
         pool = history,
@@ -64,7 +69,10 @@ class SessionControllerTest {
         myExchange = mapOf("rst" to "599", "zone" to "5"),
         seed = seed,
         startMs = 0L,
-        speedWpm = 25,
+        speedWpm = speedWpm,
+        pitchHz = pitchHz,
+        durationMinutes = durationMinutes,
+        qrm = qrm,
         flutter = flutter,
     )
 
@@ -358,7 +366,107 @@ class SessionControllerTest {
         assertEquals(run(), run())
     }
 
+    // --- the settings (T9) ------------------------------------------------------------
+
+    @Test
+    fun `the duration setting decides when the contest ends, clamped by the contest`() {
+        val short = session(durationMinutes = 5)
+        short.tick(0)
+        assertEquals(5 * 60_000L, short.uiState.durationMs)
+        short.tick(5 * 60_000L)
+        assertTrue(short.uiState.finished, "a five-minute contest is over after five minutes")
+
+        // CQ WW accepts 1..60 minutes; a longer preference is the contest's call, not the user's.
+        val long = session(durationMinutes = 240)
+        assertEquals(60 * 60_000L, long.uiState.durationMs, "the setting was not clamped by `duration.max`")
+    }
+
+    @Test
+    fun `the speed setting reaches my own keying`() {
+        // The same message, keyed by two operators: the faster one takes less time. (The
+        // station side reads the same setting through `station.speedRange`.)
+        fun cqDuration(wpm: Int): Long {
+            val controller = session(speedWpm = wpm)
+            controller.tick(0)
+            controller.enter()
+            return controller.drainCues().single().durationMs
+        }
+        assertTrue(cqDuration(40) < cqDuration(15), "40 WPM did not key faster than 15 WPM")
+    }
+
+    @Test
+    fun `the pitch setting is the centre the interfering station is measured from`() {
+        val controller = session(pitchHz = 700)
+        val interference = mutableListOf<QrmCue>()
+        var now = 0L
+        while (now <= 120_000L) {
+            controller.tick(now)
+            interference += controller.drainQrm()
+            now += 100
+        }
+        assertTrue(interference.isNotEmpty(), "no QRM to measure")
+        for (cue in interference) {
+            val offset = abs(cue.pitchHz - 700)
+            assertTrue(
+                offset in QrmStation.MIN_OFFSET_HZ..QrmStation.MAX_OFFSET_HZ,
+                "'${cue.text}' sits $offset Hz from a 700 Hz receiver: the setting was ignored",
+            )
+        }
+    }
+
+    @Test
+    fun `the QRM switch turns the interference off and on`() {
+        fun qrmTexts(enabled: Boolean): List<String> {
+            val controller = session(qrm = enabled)
+            val texts = mutableListOf<String>()
+            var now = 0L
+            while (now <= 180_000L) {
+                controller.tick(now)
+                texts += controller.drainQrm().map { it.text }
+                now += 100
+            }
+            return texts
+        }
+        assertTrue(qrmTexts(enabled = true).isNotEmpty(), "QRM on produced no interference")
+        assertEquals(emptyList(), qrmTexts(enabled = false), "QRM off still scheduled an episode")
+    }
+
+    @Test
+    fun `RIT shifts the received stations and never the self-monitor`() {
+        // The whole of RIT for this port: received cues move by the operator's offset, my own
+        // sending does not (upstream mixes the operator's sidetone in after the station loop).
+        val mine = AudioCue("CQ TEST", station = null, durationMs = 1_000)
+        val theirs = AudioCue("R 599 14", station = onAir(seed = 1), durationMs = 1_000)
+        assertEquals(0, mine.receiveOffsetHz(ritHz = 50))
+        assertEquals(50, theirs.receiveOffsetHz(ritHz = 50))
+        assertEquals(0, theirs.receiveOffsetHz(ritHz = 0))
+    }
+
+    @Test
+    fun `the same settings and the same seed replay the same session`() {
+        val custom = SessionSettings(speedWpm = 40, pitchHz = 700, durationMinutes = 10, qrm = false)
+        fun run(): List<String> {
+            val controller = session(
+                seed = 21L,
+                speedWpm = custom.speedWpm,
+                pitchHz = custom.pitchHz,
+                durationMinutes = custom.durationMinutes,
+                qrm = custom.qrm,
+            )
+            controller.tick(0)
+            controller.enter()
+            val cq = controller.drainCues().single()
+            controller.tick(cq.durationMs + 1)
+            controller.tick(SessionController.CQ_LEAD_MS + 60_000)
+            return listOf(controller.uiState.stationCall, cq.text) + controller.drainCues().map { it.text }
+        }
+        assertEquals(run(), run(), "settings changed the replay")
+    }
+
     // --- helpers ---------------------------------------------------------------------
+
+    /** A roster station for cue-shaped tests; it is only a carrier for the RIT rule. */
+    private fun onAir(seed: Long) = session(seed = seed).onAirStation ?: error("no station on the air")
 
     /** Lets my own transmission finish, cue by cue, until the queue is empty. */
     private fun drainMyTransmission(controller: SessionController) {

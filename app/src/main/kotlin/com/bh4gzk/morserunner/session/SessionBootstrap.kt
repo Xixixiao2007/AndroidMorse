@@ -11,6 +11,8 @@ import com.bh4gzk.morserunner.data.CallPool
 import com.bh4gzk.morserunner.data.StationAssets
 import com.bh4gzk.morserunner.data.StationData
 import com.bh4gzk.morserunner.expr.CallFacts
+import com.bh4gzk.morserunner.qso.QsoLog
+import com.bh4gzk.morserunner.settings.SessionSettings
 
 /**
  * Turns the packaged data into a running session.
@@ -30,22 +32,16 @@ import com.bh4gzk.morserunner.expr.CallFacts
  *    station at all is not playable, and a phone that refuses to start is worse than one that
  *    explains itself.
  *
- * The operator's identity is a placeholder, not personal data: `W1AW` is upstream's default
- * operator (`Ini.pas`) and its CQ zone comes from the exchange defaults or the DXCC table. T9
- * owns the settings screen that replaces it.
- *
- * **The session runs noisy** (T8): QSB/flutter, LID operators, the QRN noise bed and the
- * occasional QRM station are on by default — at `SessionController.start`'s defaults, since a
- * realism effect that is compiled but never heard proves nothing. The band, the flutter share
- * and the QRM rate are T9's settings; the levels live in `NoiseBed`/`FadeSchedule`.
+ * **T9 owns the operator and the session's shape.** The callsign, the speed, the pitch, the
+ * duration and the four effect switches all come from [SessionSettings]; the operator's exchange
+ * is still derived from the callsign (the contest's defaults, then the DXCC table), so changing
+ * the call changes the zone the session sends. `W1AW` is T7's placeholder, not upstream's:
+ * `Ini.Call`'s own default is `VE3NEA` (`Ini.pas:223`).
  */
 object SessionBootstrap {
 
     /** Milestone A's contest (spec §11): the one T7 has to make playable. */
     const val DEFAULT_CONTEST: String = "cqww"
-
-    /** Upstream's default operator call; T9 turns it into a setting. */
-    const val DEFAULT_MY_CALL: String = "W1AW"
 
     /** CQ zone used when the operator's call resolves to a multi-zone entity (W1AW → CT, zone 5). */
     private const val DEFAULT_CQ_ZONE: String = "5"
@@ -56,11 +52,12 @@ object SessionBootstrap {
     fun create(
         assets: AssetManager,
         data: StationData,
+        settings: SessionSettings,
         seed: Long,
         startMs: Long,
         contestId: String = DEFAULT_CONTEST,
-        myCall: String = DEFAULT_MY_CALL,
-        speedWpm: Int = SessionController.DEFAULT_SPEED_WPM,
+        /** A log to resume into (T9's session snapshot); empty for a new contest. */
+        log: QsoLog = QsoLog(),
     ): Result {
         val config = when (val loaded = ContestLibrary.load(contestId)) {
             is LoadResult.Success -> loaded.config
@@ -70,7 +67,7 @@ object SessionBootstrap {
             )
         }
         val facts: CallFacts = data.callFacts
-        val parsed = history(assets, config, myCall, facts)
+        val parsed = history(assets, config, settings.myCall, facts)
 
         val pool: CallPool
         val historyLookup: HistoryLookup
@@ -97,11 +94,17 @@ object SessionBootstrap {
             history = historyLookup,
             autocompleteCalls = autocomplete,
             calls = facts,
-            myCall = myCall,
-            myExchange = myExchange(config, facts, myCall),
+            myCall = settings.myCall,
+            myExchange = myExchange(config, facts, settings.myCall),
             seed = seed,
             startMs = startMs,
-            speedWpm = speedWpm,
+            speedWpm = settings.speedWpm,
+            pitchHz = settings.pitchHz,
+            durationMinutes = settings.durationMinutes,
+            lids = settings.lids,
+            flutter = settings.flutter,
+            qrm = settings.qrm,
+            log = log,
         )
         return Result(controller, note)
     }

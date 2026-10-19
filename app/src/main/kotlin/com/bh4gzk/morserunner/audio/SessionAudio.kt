@@ -6,6 +6,7 @@ import com.bh4gzk.morserunner.contest.GeneratedExchange
 import com.bh4gzk.morserunner.contest.RosterStation
 import com.bh4gzk.morserunner.session.AudioCue
 import com.bh4gzk.morserunner.session.QrmCue
+import com.bh4gzk.morserunner.session.receiveOffsetHz
 import java.io.Closeable
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -19,18 +20,22 @@ import java.util.concurrent.atomic.AtomicInteger
  * screen keeps its frames and the cues keep their order.
  *
  * My own sending is monitored through the same synthesizer (spec §7) at a fixed pitch; a
- * station is played at its own speed, pitch, level and fade.
+ * station is played at its own speed, pitch, level and fade, shifted by the operator's RIT.
  *
  * The interfering station (spec §7's QRM) arrives on its own cue type and is played as a
  * steady signal at its own pitch: it has no fade, and it is never mistaken for the station
- * being worked.
+ * being worked. It is **not** shifted by RIT either — ADR-0009 records that deviation (upstream
+ * demodulates every `TStation` with the same RIT term; here the interfering station's pitch is
+ * the evidence that it is off-frequency, and that claim must not move with the receiver).
  */
 class SessionAudio(
     private val engine: CwAudioEngine,
     private val stationAudio: StationAudio,
     private val myCall: String,
     private val mySpeedWpm: Int,
-    private val myPitchHz: Int = 600,
+    private val myPitchHz: Int = Receiver.DEFAULT_PITCH_HZ,
+    ritHz: Int = 0,
+    private val rootSeed: Long = ROOT_SEED,
 ) : Closeable {
 
     private val worker = Executors.newSingleThreadExecutor { runnable ->
@@ -41,6 +46,22 @@ class SessionAudio(
 
     @Volatile
     private var closed = false
+
+    /**
+     * The operator's receive offset in Hz (spec §11 T9).
+     *
+     * Read on the audio worker for every received transmission, so the settings screen can
+     * change it mid-contest and the next thing the other operator sends is already shifted —
+     * which is what a RIT knob does on a real radio.
+     */
+    @Volatile
+    var ritHz: Int = ritHz
+        private set
+
+    /** Sets the receive offset; takes effect from the next received transmission. */
+    fun setRit(hz: Int) {
+        ritHz = hz
+    }
 
     /** My station as the audio layer sees it: no fade, full level, my own speed and pitch. */
     private val myStation = RosterStation(
@@ -62,7 +83,11 @@ class SessionAudio(
         worker.execute {
             val station = cue.station ?: myStation
             val id = voiceIds.getAndIncrement()
-            engine.play(stationAudio.voice(station, id, cue.text, ROOT_SEED))
+            // `receiveOffsetHz` is where RIT's asymmetry lives: received stations move, my own
+            // sending does not (`Contest.pas:721-731` and the sidetone mixed in after it).
+            engine.play(
+                stationAudio.voice(station, id, cue.text, rootSeed, cue.receiveOffsetHz(ritHz)),
+            )
         }
     }
 
@@ -87,7 +112,11 @@ class SessionAudio(
     }
 
     private companion object {
-        /** The fade stream's root; per-station variation comes from the callsign. */
+        /**
+         * The fade stream's root before the session seed arrives; per-station variation comes
+         * from the callsign. `MainActivity` passes the session seed, so the fades replay with
+         * the rest of the session (ADR-0007 §6).
+         */
         const val ROOT_SEED: Long = 20_261_019L
     }
 }

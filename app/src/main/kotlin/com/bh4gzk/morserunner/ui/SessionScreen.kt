@@ -61,6 +61,7 @@ import com.bh4gzk.morserunner.session.PhysicalKey
 import com.bh4gzk.morserunner.session.SessionController
 import com.bh4gzk.morserunner.session.SessionKeys
 import com.bh4gzk.morserunner.session.SessionUiState
+import com.bh4gzk.morserunner.settings.SessionSettings
 import kotlinx.coroutines.delay
 
 /** What the screen can ask the session to do (spec §8's inputs). */
@@ -82,10 +83,23 @@ class SessionEvents(
  * The tick loop is the session's clock: every 40 ms it advances the controller, plays whatever
  * came due, and refreshes the snapshot. Nothing here reads a wall clock for game logic; the
  * controller does not even have one.
+ *
+ * T9 adds two seams without touching the grid: [settings] plus [onSaveSettings] gives the
+ * status-bar button a settings dialog (spec §8's layout is unchanged), and [onTick] lets the
+ * activity persist the session's state as it changes (F10).
  */
 @Composable
-fun SessionRoot(controller: SessionController, audio: SessionAudio, note: String) {
+fun SessionRoot(
+    controller: SessionController,
+    audio: SessionAudio,
+    note: String,
+    settings: SessionSettings = SessionSettings.DEFAULT,
+    onSaveSettings: (SessionSettings) -> Unit = {},
+    onRestartSession: (SessionSettings) -> Unit = {},
+    onTick: ((SessionUiState) -> Unit)? = null,
+) {
     var ui by remember { mutableStateOf(controller.uiState) }
+    var showSettings by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val rootFocus = remember { FocusRequester() }
 
@@ -119,6 +133,9 @@ fun SessionRoot(controller: SessionController, audio: SessionAudio, note: String
             // QSO's cues, and it is a steady signal, not a fading station.
             for (cue in controller.drainQrm()) audio.playQrm(cue)
             ui = controller.uiState
+            // The activity persists what changed (log, boxes, end of contest); the sink is
+            // cheap when nothing did, so it runs on the same 40 ms clock.
+            onTick?.invoke(ui)
             delay(TICK_MS)
         }
     }
@@ -148,7 +165,7 @@ fun SessionRoot(controller: SessionController, audio: SessionAudio, note: String
                         modifier = Modifier.weight(0.64f).fillMaxHeight(),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        StatusBar(ui)
+                        StatusBar(ui, onOpenSettings = { showSettings = true })
                         SignalPanel(ui, Modifier.weight(1f))
                         EntryRow(ui, events)
                         ErrorsAndNote(ui, note)
@@ -160,7 +177,7 @@ fun SessionRoot(controller: SessionController, audio: SessionAudio, note: String
                     modifier = Modifier.fillMaxSize().padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    StatusBar(ui)
+                    StatusBar(ui, onOpenSettings = { showSettings = true })
                     SignalPanel(ui, Modifier.weight(1f))
                     EntryRow(ui, events)
                     ErrorsAndNote(ui, note)
@@ -168,6 +185,21 @@ fun SessionRoot(controller: SessionController, audio: SessionAudio, note: String
                 }
             }
         }
+    }
+
+    if (showSettings) {
+        SettingsDialog(
+            settings = settings,
+            onSave = {
+                onSaveSettings(it)
+                showSettings = false
+            },
+            onRestart = {
+                onRestartSession(it)
+                showSettings = false
+            },
+            onDismiss = { showSettings = false },
+        )
     }
 }
 
@@ -220,7 +252,7 @@ private fun Key.toPhysicalKey(): PhysicalKey = when (this) {
 // --- status bar ----------------------------------------------------------------------
 
 @Composable
-private fun StatusBar(ui: SessionUiState) {
+private fun StatusBar(ui: SessionUiState, onOpenSettings: () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(10.dp),
@@ -242,6 +274,9 @@ private fun StatusBar(ui: SessionUiState) {
             LabelValue("QSO", "${ui.qsos}")
             LabelValue("分", "${ui.rawScore}（验 ${ui.verifiedScore}）")
             LabelValue("速率", "${ui.rateLastFiveMinutes}/5m · ${ui.ratePerHour.toInt()}/h")
+            // T9: the settings entry point. Spec §8's status bar only lists what it *shows*;
+            // this is a control, and it is the smallest one that leaves the 2×4 grid untouched.
+            TextButton(onClick = onOpenSettings) { Text("设置") }
         }
     }
 }
