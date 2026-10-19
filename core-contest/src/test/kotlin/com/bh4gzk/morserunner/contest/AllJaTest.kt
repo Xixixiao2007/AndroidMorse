@@ -68,7 +68,7 @@ class AllJaTest {
         val bundled = ContestLibrary.bundled()
         assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
         assertEquals(
-            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag"),
+            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops"),
             bundled.configs.map { it.id },
         )
         assertEquals(ContestConfig.SUPPORTED_SCHEMA_VERSION, allja.schemaVersion)

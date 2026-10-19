@@ -249,6 +249,60 @@ class PackagedAssetsTest {
     }
 
     @Test
+    fun `the packaged CWops CWT history drives a real roster`() {
+        // T14: the fifth per-contest ticket, and the series' second header-driven history. The
+        // file is upstream's `CWOPS.LIST`, copied unmodified (MPL-2.0, spec §9), keeping its
+        // name and case because Android assets are case-sensitive.
+        val bundled = ContestLibrary.bundled()
+        assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
+        val config = bundled.configs.firstOrNull { it.id == "cwops" }
+        assertNotNull(config, "no bundled cwops config")
+
+        val file = File(assetsDir, config.callHistory.asset)
+        assertEquals(190_371, file.length().toInt(), "the packaged history is not upstream's CWOPS.LIST")
+        val history = assertIs<HistoryLoad.Loaded>(
+            CallHistoryFile.parse(file.readText(), config.callHistory, "W1AW", data.callFacts),
+        ).history
+        // 6 344 lines → 6 290 records: upstream's rule table keeps 6 293 over 6 292 distinct
+        // calls (`W1AL` is duplicated), and the shared call grammar drops `F/G7BED`/`I/W9CF`.
+        assertEquals(6_290, history.size, "unexpected CWops CWT history size ${history.size}")
+        assertEquals("Robert", history.recordFor("3B9FR")?.get("name"))
+        assertEquals("1343", history.recordFor("3B9FR")?.get("exch"))
+        assertEquals("Scott", history.recordFor("W1AL")?.get("name"))
+        assertEquals("4O", history.recordFor("4O3A")?.get("exch"))
+
+        // Every exchange is a legal entry for the operator's own second box
+        // (ExchFields.pas:54 `[0-9A-Z]*`, ≤12): measured, the longest is 4. Four rows spell it
+        // in lower case (`AC8SI,mi`), which upstream upper-cases at load (`CwOps.pas:88`) and
+        // the document's `upper(hisExch)` does for the sent exchange.
+        val exchanges = history.calls.map { history.recordFor(it)?.get("exch").orEmpty().uppercase() }
+        assertEquals(4, exchanges.maxOf { it.length }, "an exchange is longer than the box allows")
+        assertTrue(exchanges.all { it.all { c -> c in '0'..'9' || c in 'A'..'Z' } })
+        assertEquals("mi", history.recordFor("AC8SI")?.get("exch"), "the file's own case is kept")
+        assertEquals(
+            3_055,
+            exchanges.count { it.all { c -> c in '0'..'9' } },
+            "the numeric (CWT member) exchanges",
+        )
+
+        val roster = StationRoster(
+            config = config,
+            pool = history,
+            history = history,
+            settings = RosterSettings(speedWpm = 15),
+            seed = 20_261_020L,
+            calls = data.callFacts,
+        )
+        repeat(StationRoster.MAX_STATIONS) { roster.add() }
+        assertEquals(StationRoster.MAX_STATIONS, roster.size)
+        roster.stations.forEach { station ->
+            val record = assertNotNull(history.recordFor(station.call), station.call)
+            assertEquals(record["name"].orEmpty().uppercase(), station.exchange.exch1, station.call)
+            assertEquals(record["exch"].orEmpty().uppercase(), station.exchange.exch2, station.call)
+        }
+    }
+
+    @Test
     fun `the packaged DXCC list resolves the entities the contests score on`() {
         assertEquals(335, data.dxcc.size, "the DXCC table is not the shipped one")
         assertEquals("Fed. Rep. of Germany", data.callFacts.country("DL2XYZ"))

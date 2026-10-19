@@ -181,6 +181,29 @@ deliberate: the two Pascal functions are the same code, so one document's semant
 (ADR-0013 §3). The one difference that matters is data: a code like `01039` must stay a
 **string**, or the leading zero would fold two multipliers into one.
 
+## CWops CWT — `CwOps.pas` (T14, the fifth per-contest ticket)
+
+| | |
+|---|---|
+| call history | `CWOPS.LIST` (6 344 lines), comma via `StrictDelimiter` (`:279-286`), **header-driven**: the `!!Order!!,Call,Name,Exch1,UserText,` line names the columns (`:50-56`), and the `#` lines are the banner; `tl.Count >= 3` (`:82`); call, name and exchange all non-empty (`:91-93`); `length(name) > 10` and `length(exch) > 5` dropped (`:94-95`); `usertext` stored only when `tl.Count > 3` (`:89-90`); **no call validation**; no dedupe, no DXCC gate (`ParamStr(1)` file, `:74`) |
+| my exchange | `etOpName` + `etGenericField`, default `DAVID 123`, msg `'<op name> <CWOPS Number\|State\|Country>' (e.g. DAVID 123)` (`Ini.pas:106-114`); captions `'Name'` / `'Exch'`; name `[A-Z][A-Z]*` L10 (`ExchFields.pas:45`), exchange `[0-9A-Z]*` L12 (`:54`), both anchored as `'^(' + R + ')$'` (`Contest.pas:310`) |
+| DX Exch1 | the record's `Exch1` = the file's **Name** column, upper-cased at load (`:86-88`, `:168-173`) |
+| DX Exch2 | the record's `Exch2` = the file's **Exch1** column: a CWT **member number** (digits), or a **state/province** or **country prefix** (`:86-88`, `:172`) |
+| format facts | numeric exchanges are member numbers; everything else is a state/province (`FL`, `ND`) or a country prefix (`G`, `4O`, `DL`); measured lengths 1–4 characters |
+| points | constant 1 (`:247`) |
+| multiplier | **the worked call itself** (`Result:= Qso^.Call`, `:248`), so the log's set union is the "unique calls" count; no `their.parse` |
+| messages | `msgCQ` → `CQ CWT <my>` (`:184`), `msgLongCQ` → `CQ CQ CWT <my> <my>` (`:193`, the QRM station only); `msgR_NR`/`msgR_NR2` send `'R '` 10 % of the time (`:185-192`) — a **station-side variant the schema cannot express** (ADR-0011 §8.3) |
+| capability flags | `TCWOPS.Create` (`:113-118`) sets neither `BFarnsworthEnabled` nor a DXCC requirement |
+| verdict labels | name mismatch `leNAME` (`Log.pas:860`); **the second field's label depends on the true value**: `etGenericField` under `scCwt` prints `leNR` when `IsNum(TrueExch2)` and `leQTH` otherwise (`Log.pas:911-918`) |
+| data, measured | 6 334 data rows; upstream's rule table keeps 6 293 over **6 292 distinct calls** (`W1AL` is listed twice, byte for byte); the port's map keeps one and the shared call grammar drops `F/G7BED` and `I/W9CF` → **6 290 records**; 3 055 numeric (member) / 3 235 state-or-prefix exchanges, 2 814 distinct exchange values; longest name 9 (`length > 10` never fires), longest exchange 4 (`length > 5` never fires); four rows spell the exchange in lower case (`AC8SI,mi`) and upstream upper-cases at load |
+
+Implemented in `contests/cwops.json` (ADR-0014); `CWOPS.LIST` is packaged unmodified
+(190 371 bytes, sha256 `06ae0020…`), keeping upstream's file name and case. It is the series'
+second **header-driven** history (IARU HF was the first), so the `!!Order!!` line must **not** be
+a skip prefix — the config lists only `#`. The multiplier is the first one in the series that is
+not derived from the exchange at all: it is the call, which is why two stations in the same state
+are two multipliers and a duplicate call adds none.
+
 ### Data inventory for the remaining per-contest tickets (verified 2026-10-20)
 
 | Asset | Used by | State |
@@ -191,7 +214,7 @@ deliberate: the two Pascal functions are the same code, so one document's semant
 | `ARRLDXCW_USDX.txt` | ARRL DX (`ArrlDx.pas`) | **not packaged** — needs the my-exchange branch (§1 of ADR-0010) |
 | `JARL_ALLJA.TXT` (2 542 lines, `call,exch1[,usertext]`, `#` banner) | JARL ALL JA (`AllJa.pas:72-100`) | packaged (T12) — RST `599` + `<pref><power>`; no serial; 1 point; multiplier = `Exch2` minus a trailing `L/M/H/P` (`:190-207`) |
 | `JARL_ACAG.TXT` (2 551 lines, `call,exch1[,usertext]`, `#` banner) | JARL ACAG (`Acag.pas:72-100`) | packaged (T13) — RST `599` + `<city\|gun\|ku><power>`; no serial; 1 point; multiplier = `Exch2` minus a trailing `L/M/H/P` (`:191-207`), a **string** so leading zeros survive |
-| `CWOPS.LIST` (6 344 lines, header-driven `!!Order!!,Call,Name,Exch1,UserText`) | CWops CWT (`CwOps.pas:74`) | **not packaged** — name + CWT number/state/country from the file; no serial |
+| `CWOPS.LIST` (6 344 lines, header-driven `!!Order!!,Call,Name,Exch1,UserText`) | CWops CWT (`CwOps.pas:74`) | packaged (T14) — name + CWT number/state/country from the file; 1 point; multiplier = **the worked call**; no serial |
 | `FDGOTA.txt` (17 330 lines, `!!Order!!,Call,Exch1,Sect,UserText`) | ARRL Field Day (`ArrlFd.pas:224`) | **not packaged** — class + section from the file; the two-pass club-name logic (`:227-260`) is engine code |
 | `HstResults.txt` | `Main.pas` (HST results import) | empty file; HST also needs the serial fix (F8) |
 | — | CQ WPX | no history → `MASTER.DTA`; needs F8 (the once-computed serial) |

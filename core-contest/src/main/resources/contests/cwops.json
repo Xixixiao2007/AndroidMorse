@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "cwops",
+  "name": "CWOPS CWT",
+  "duration": { "default": 30, "min": 1, "max": 60 },
+  "runModes": ["single-call", "pile-up"],
+  "constants": {},
+  "exchange": {
+    "myFields": [
+      { "key": "name", "type": "text", "label": "Name" },
+      { "key": "exch", "type": "text", "label": "Exch" }
+    ],
+    "their": {
+      "dice": [],
+      "bindings": {
+        "hisName": { "source": "history", "column": "name" },
+        "hisExch": { "source": "history", "column": "exch" }
+      },
+      "exch1": "upper(hisName)",
+      "exch2": "upper(hisExch)"
+    }
+  },
+  "validation": [
+    { "field": "name", "when": "not matches(upper(name), '^[A-Z][A-Z]*$') or len(name) > 10", "error": "Name must be letters, up to 10" },
+    { "field": "exch", "when": "not matches(upper(exch), '^[0-9A-Z]*$') or len(exch) > 12", "error": "Exch must be letters or digits, up to 12" }
+  ],
+  "scoring": {
+    "points": "1",
+    "multipliers": [
+      { "key": "theirCall" }
+    ]
+  },
+  "callHistory": {
+    "asset": "CWOPS.LIST",
+    "delimiter": ",",
+    "skipPrefixes": ["#"],
+    "header": {
+      "marker": "!!Order!!",
+      "names": { "call": "Call", "name": "Name", "exch": "Exch1", "userText": "UserText" }
+    },
+    "minFields": 3,
+    "columns": [
+      { "name": "call", "type": "callsign", "required": true },
+      { "name": "name", "type": "text", "required": true },
+      { "name": "exch", "type": "text", "required": true },
+      { "name": "userText", "type": "text" }
+    ],
+    "dedupe": false,
+    "requiresMyCallInDxcc": false
+  },
+  "station": {
+    "callPool": "MASTER.DTA",
+    "speedRange": { "min": "speed - 5", "max": "speed + 10" },
+    "exchangeDefaults": { "name": "DAVID", "exch": "123" }
+  },
+  "messages": {
+    "CQ": "CQ CWT <my>",
+    "longCQ": "CQ CQ CWT <my> <my>"
+  },
+  "capabilities": { "farnsworth": false, "requiresMyDxcc": false }
+}

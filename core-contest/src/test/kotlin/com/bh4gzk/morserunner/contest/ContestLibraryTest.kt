@@ -19,7 +19,7 @@ class ContestLibraryTest {
             "unexpected load errors:\n" + bundled.errors.joinToString("\n") { it.render() },
         )
         assertEquals(
-            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag"),
+            listOf("cqww", "arrlss", "iaruhf", "naqp", "k1usnsst", "allja", "acag", "cwops"),
             bundled.configs.map { it.id },
         )
     }

@@ -123,7 +123,7 @@ class ContestRules(
                 val field = fields.firstOrNull { it.key == key } ?: continue
                 val typedValue = typed[key] ?: continue
                 if (!sameValue(field, typedValue, trueValue)) {
-                    errors += labelFor(field)
+                    errors += labelFor(field, trueValue)
                     corrections += trueValue
                 }
             }
@@ -140,7 +140,7 @@ class ContestRules(
                 canonical(typedValue) == canonical(trueValue)
             }
             if (!same) {
-                errors += piece.firstOrNull()?.let { labelFor(it) } ?: QsoError.Err
+                errors += piece.firstOrNull()?.let { labelFor(it, trueValue) } ?: QsoError.Err
                 corrections += trueValue
             }
         }
@@ -314,8 +314,16 @@ class ContestRules(
 
     private fun normaliseCall(call: String): String = call.replace("?", "").trim().uppercase()
 
-    /** The label upstream would print in the log's error column for this field. */
-    private fun labelFor(field: ExchangeField): QsoError = when (field.type) {
+    /**
+     * The label upstream would print in the log's error column for this field.
+     *
+     * [trueValue] is what the station actually sent, and only one contest reads it: CWops CWT's
+     * second piece is `etGenericField`, whose mismatch upstream labels `leNR` when the true value
+     * is numeric (a CWT member number) and `leQTH` otherwise (a state, province or country
+     * prefix; `Log.pas:911-918`). Every other document's label depends on the field alone, so the
+     * argument defaults to `null` and their mapping is unchanged (ADR-0014 §4).
+     */
+    private fun labelFor(field: ExchangeField, trueValue: String? = null): QsoError = when (field.type) {
         FieldType.RST -> QsoError.Rst
         FieldType.SERIAL -> QsoError.Number
         FieldType.CHECK -> QsoError.Check
@@ -334,10 +342,17 @@ class ContestRules(
             // label (`Log.pas:943`). Both are naming, not a new rule.
             field.key == "pref" -> QsoError.Number
             field.key == "city" -> QsoError.Number
+            // CWops CWT's second field is `etGenericField` with a *value-dependent* label
+            // (`Log.pas:911-918`): a member number is `leNR`, anything else `leQTH`.
+            field.key == "exch" -> if (isNumeric(trueValue)) QsoError.Number else QsoError.Qth
             "itu" in field.key || "soc" in field.key -> QsoError.Qth
             else -> QsoError.Err
         }
     }
+
+    /** Upstream's `IsNum` (`CwOps.pas:263-274`): non-empty, ASCII digits only. */
+    private fun isNumeric(text: String?): Boolean =
+        !text.isNullOrEmpty() && text.all { it in '0'..'9' }
 
     private fun mapOfNotNull(vararg pairs: Pair<String?, String>): Map<String, String> =
         pairs.mapNotNull { (key, value) -> key?.let { it to value } }.toMap()

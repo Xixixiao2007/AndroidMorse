@@ -170,6 +170,35 @@ class RealCallHistoryTest {
         assertTrue(history.calls.none { it.startsWith("#") || it.startsWith("!!") })
     }
 
+    @Test
+    fun `the real CWops CWT history is header-driven and loses three rows`() {
+        val history = parse("cwops")
+
+        // 6 344 lines: the `!!Order!!,Call,Name,Exch1,UserText,` header, a nine-line '#' banner
+        // and 6 334 data rows. CwOps.pas:82-95 keeps a row when `tl.Count >= 3` and call/name/exch
+        // non-empty, which leaves 6 293 records over 6 292 distinct calls (`W1AL` is listed
+        // twice, byte for byte). The port's map keeps one of the two, and the shared call grammar
+        // drops `F/G7BED` and `I/W9CF`, so it holds 6 290 (ADR-0014 §3).
+        assertEquals(6_290, history.size, "unexpected CWops CWT history size ${history.size}")
+        assertTrue(history.calls.all { history.recordFor(it)?.get("name").orEmpty().isNotEmpty() })
+        assertTrue(history.calls.all { history.recordFor(it)?.get("exch").orEmpty().isNotEmpty() })
+        assertNull(history.recordFor("F/G7BED"), "a one-letter portable prefix fails the shared grammar")
+        assertNull(history.recordFor("I/W9CF"), "a one-letter prefix fails the shared grammar")
+        // A member number, a state and a country prefix, all from the file.
+        assertEquals("Robert", history.recordFor("3B9FR")?.get("name"))
+        assertEquals("1343", history.recordFor("3B9FR")?.get("exch"))
+        assertEquals("Scott", history.recordFor("W1AL")?.get("name"))
+        assertEquals("FL", history.recordFor("W1AL")?.get("exch"))
+        assertEquals("4O", history.recordFor("4O3A")?.get("exch"))
+        // The two loader-only caps never fire on the shipped data: the longest name is 9
+        // (`length > 10`) and the longest exchange 4 (`length > 5`), so no row is lost to them.
+        val names = history.calls.map { history.recordFor(it)?.get("name").orEmpty() }
+        val exchanges = history.calls.map { history.recordFor(it)?.get("exch").orEmpty() }
+        assertEquals(9, names.maxOf { it.length }, "a name is longer than the loader's cap")
+        assertEquals(4, exchanges.maxOf { it.length }, "an exchange is longer than the loader's cap")
+        assertTrue(history.calls.none { it.startsWith("#") || it.startsWith("!!") })
+    }
+
     private val knowsW1Aw = object : CallFacts {
         override fun prefix(call: String): String? = null
         override fun zone(call: String): Double? = null
