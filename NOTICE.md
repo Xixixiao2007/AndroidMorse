@@ -37,10 +37,10 @@ parser, lexers).
 These are redistributed **unmodified** from upstream, and they carry their own terms:
 
 - **`DXCC.LIST`** — upstream's own header reads: *"Used with permission: DXCC Country List,
-  copyright ARRL."* The ARRL DXCC list is ARRL material, not MPL-2.0. It is reproduced here
-  because upstream distributes it with its app; **redistributing this app publicly should be
-  confirmed with ARRL or replaced with an equivalent source that permits redistribution.**
-  This is an open risk, recorded rather than resolved.
+  copyright ARRL."* It is ARRL material, not MPL-2.0, reproduced here because upstream
+  distributes it with its app. **Recorded decision (project owner, 2026-10-19): no further
+  action** — the list is effectively unenforced in practice and this project will not gate on
+  it. The provenance stays documented above; that documentation is the whole of the mitigation.
 - **`MASTER.DTA`** — the callsign pool, binary, unmodified from upstream. Upstream carries no
   visible provenance for it.
 - **Contest call-history files** (`CQWWCW.TXT`, `SSCW.TXT`, `IARU_HF.txt`, …) — per-contest,

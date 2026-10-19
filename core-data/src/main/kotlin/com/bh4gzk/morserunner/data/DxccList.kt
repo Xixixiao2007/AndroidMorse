@@ -61,6 +61,35 @@ class DxccList private constructor(
         return null
     }
 
+    /**
+     * The record for a full callsign: extract the DXCC-mode prefix, apply
+     * upstream's two hard-coded rewrites, then look it up (`DXCC.pas:136-170`).
+     *
+     * The rewrites are not cosmetic — without them the table answers wrongly:
+     *  - **KG4**: a 2×2 call is Guantanamo Bay, but 2×1 and 2×3 calls are US
+     *    (`DXCC.pas:149-158` rewrites those to `K`; `KG4ABC` would otherwise be
+     *    Guantanamo Bay).
+     *  - **Antarctica**: `CE9` and `KC4` are rewritten to `CE9KC4`
+     *    (`DXCC.pas:160-165`), because the table maps `CE9` to South Shetland Is.
+     *    and `KC4` to the United States.
+     */
+    fun find(call: String): DxccRecord? {
+        var prefix = CallPrefix.extractPrefix(call, deleteTrailingLetters = false)
+        if (prefix.isEmpty()) return null
+
+        if (prefix.startsWith("KG4") && !prefix.startsWith("KG44") &&
+            (prefix.length == 6 || prefix.length == 4)
+        ) {
+            prefix = "K"
+        }
+        if ((prefix.length == 3 && (prefix == "CE9" || prefix == "KC4")) ||
+            (prefix.length == 6 && (prefix.startsWith("KC4AA") || prefix.startsWith("KC4US")))
+        ) {
+            prefix = "CE9KC4"
+        }
+        return lookup(prefix)
+    }
+
     companion object {
 
         private const val FIELD_COUNT = 7

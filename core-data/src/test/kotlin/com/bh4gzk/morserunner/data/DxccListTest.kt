@@ -109,6 +109,52 @@ class DxccListTest {
         assertNull(list.lookup("ZZC4"))
     }
 
+
+    // --- find(): the two hard-coded rewrites in DXCC.pas:136-170 ---------------
+
+    private val rewriteTable = """
+        F;F;France;EU;28;14;227
+        K;K|W|N;United States of America;NA;8;3,4,5;291
+        KG4;KG4;Guantanamo Bay;NA;8;08;105
+        CE9;CE9;South Shetland Is.;SA;73;13;241
+        CE9KC4;CE9KC4|FT8Y|RI1AN;Antarctica;AN;67;12,13,29,30;013
+    """.trimIndent()
+
+    @Test
+    fun `KG4 2x2 calls are Guantanamo but 2x1 and 2x3 calls are US`() {
+        // DXCC.pas:149-158 -- without the rewrite KG4ABC would resolve to
+        // Guantanamo Bay instead of the United States.
+        val list = DxccList.parse(rewriteTable)
+
+        assertEquals("Guantanamo Bay", list.find("KG4AA")?.entity)          // 2x2
+        assertEquals("United States of America", list.find("KG4ABC")?.entity) // 2x3
+        assertEquals("United States of America", list.find("KG4A")?.entity)   // 2x1
+    }
+
+    @Test
+    fun `CE9 and KC4 aliases resolve to Antarctica`() {
+        // DXCC.pas:160-165 -- the table alone maps CE9 to South Shetland Is. and
+        // KC4 to the United States, which is wrong for Antarctic operations.
+        val list = DxccList.parse(rewriteTable)
+
+        assertEquals("Antarctica", list.find("CE9/W7SST")?.entity)
+        assertEquals("Antarctica", list.find("KC4/W7SST")?.entity)
+        assertEquals("Antarctica", list.find("KC4AAA")?.entity)
+        assertEquals("South Shetland Is.", list.lookup("CE9")?.entity)
+    }
+
+    @Test
+    fun `find uses the DXCC prefix mode and rejects nonsense`() {
+        val list = DxccList.parse(rewriteTable)
+
+        assertEquals("United States of America", list.find("W1AW")?.entity)
+        // F6/W7SST is a US operator transmitting from France: the station's
+        // location wins, which is exactly why FindRec uses the full call
+        // (DXCC.pas:143-147).
+        assertEquals("France", list.find("F6/W7SST")?.entity)
+        assertNull(list.find(""))
+    }
+
     @Test
     fun `an empty file parses to an empty table`() {
         val list = DxccList.parse("")
