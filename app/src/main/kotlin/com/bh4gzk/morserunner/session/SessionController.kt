@@ -1,7 +1,9 @@
 package com.bh4gzk.morserunner.session
 
+import com.bh4gzk.morserunner.audio.FadeSchedule
 import com.bh4gzk.morserunner.audio.MorseEncoder
 import com.bh4gzk.morserunner.audio.MorseTiming
+import com.bh4gzk.morserunner.contest.BehaviourProfile
 import com.bh4gzk.morserunner.contest.ContestConfig
 import com.bh4gzk.morserunner.contest.RosterSettings
 import com.bh4gzk.morserunner.contest.RosterStation
@@ -28,6 +30,7 @@ import com.bh4gzk.morserunner.qso.QsoLog
 import com.bh4gzk.morserunner.qso.QsoMachine
 import com.bh4gzk.morserunner.qso.QsoMessage
 import com.bh4gzk.morserunner.qso.QsoRecord
+import com.bh4gzk.morserunner.qso.QrmStation
 import com.bh4gzk.morserunner.qso.QsoState
 import com.bh4gzk.morserunner.qso.RunMode
 import com.bh4gzk.morserunner.qso.StationMessage
@@ -47,6 +50,24 @@ data class AudioCue(
     /** The station sending it, or `null` when it is my own sending (the self-monitor). */
     val station: RosterStation?,
     /** How long it keys for, from the same timing the synthesizer uses. */
+    val durationMs: Long,
+)
+
+/**
+ * One transmission of the interfering station (spec §7's QRM, `QrmStn.pas`).
+ *
+ * A separate type from [AudioCue] on purpose: this is **not** a station in the QSO. It
+ * never enters [QsoMachine], it is never the "last heard" of the station being worked, and
+ * the screen plays it as its own signal. It is a steady carrier at its own pitch —
+ * upstream's `TQrmStation` has no `TQsb` — so there is no fade to carry.
+ */
+data class QrmCue(
+    val text: String,
+    /** Absolute pitch in Hz: the operator's pitch plus the station's own offset. */
+    val pitchHz: Int,
+    val speedWpm: Int,
+    /** Linear level in `[0.111, 0.667]`, as `QrmStn.pas` draws it. */
+    val level: Double,
     val durationMs: Long,
 )
 
@@ -117,6 +138,8 @@ class SessionController private constructor(
     private val historyLookup: HistoryLookup?,
     private val autocompleteCalls: Collection<String>,
     private val roster: StationRoster,
+    /** The contest's call pool; the interfering station is drawn from it (`PickCallOnly`). */
+    private val pool: CallPool,
     private val rules: ContestRules,
     private val script: MessageScript,
     private val myCall: String,
@@ -146,6 +169,30 @@ class SessionController private constructor(
         /** The contest whose operator answers with the ARRL SS wording (`OperatorFlavour`). */
         private const val ARRL_SS: String = "arrlss"
 
+        /** The operator's pitch before T9's settings speak — `RosterSettings.pitchHz`'s default. */
+        const val DEFAULT_PITCH_HZ: Int = 600
+
+        /**
+         * The first interfering station waits this long (`Contest.pas:695` skips the opening
+         * blocks), so the opening CQ stays clean.
+         */
+        const val QRM_FIRST_MS: Long = 15_000L
+
+        /**
+         * The quiet stretch between two QRM episodes.
+         *
+         * Upstream's draw is `Random < 0.0002` per 46 ms block (`Contest.pas:716`), i.e. one
+         * every ~4 minutes. T8 needs the effect audible inside a two-minute device check, so
+         * the gap is 40 s ± 20 s; T9 exposes the rate as a setting and this becomes its default.
+         */
+        const val QRM_GAP_MS: Long = 40_000L
+
+        /** How much the quiet stretch may vary on top of [QRM_GAP_MS]. */
+        private const val QRM_GAP_JITTER_MS: Long = 20_000L
+
+        /** The tag of the derived stream that drives the interference (see `qrmRandom`). */
+        private const val QRM_STREAM: String = "qrm"
+
         /**
          * Builds a session.
          *
@@ -168,6 +215,9 @@ class SessionController private constructor(
             startMs: Long,
             speedWpm: Int = DEFAULT_SPEED_WPM,
             stationsOnAir: Int = 1,
+            pitchHz: Int = DEFAULT_PITCH_HZ,
+            lids: Boolean = true,
+            flutter: Boolean = true,
             log: QsoLog = QsoLog(),
         ): SessionController {
             val rules = ContestRules(config, MyStation(myCall, myExchange), calls)
@@ -177,7 +227,13 @@ class SessionController private constructor(
                 history = history,
                 settings = RosterSettings(
                     speedWpm = speedWpm,
+                    pitchHz = pitchHz,
                     maxStations = stationsOnAir.coerceAtLeast(1),
+                    lids = lids,
+                    // T8: the session runs with flutter on (30 % of stations, `DxStn.pas:77-79`);
+                    // T9's settings screen will expose the switch. Off is upstream's default,
+                    // and a dead effect would prove nothing.
+                    flutter = flutter,
                 ),
                 seed = seed,
                 calls = calls,
@@ -187,6 +243,7 @@ class SessionController private constructor(
                 historyLookup = history,
                 autocompleteCalls = autocompleteCalls,
                 roster = roster,
+                pool = pool,
                 rules = rules,
                 script = MessageScript(rules.operator, config.messages),
                 myCall = myCall,
@@ -238,6 +295,30 @@ class SessionController private constructor(
     /** The station that heard my `TU` and must be replaced once the send is over. */
     private var retireStation: RosterStation? = null
 
+    // --- the interfering station (spec §7's QRM) --------------------------------------
+
+    /** The QRM station mid-episode, or `null` between episodes. */
+    private var qrm: QrmStation? = null
+
+    /** How many of [QrmStation.texts] it has transmitted. */
+    private var qrmIndex: Int = 0
+
+    /** When the current transmission ends; `null` between transmissions. */
+    private var qrmSendEndsAt: Long? = null
+
+    /** When the next transmission (or the next episode) is due. */
+    private var qrmNextAt: Long = startMs + QRM_FIRST_MS
+
+    private val qrmCues = ArrayDeque<QrmCue>()
+
+    /**
+     * The interference's random stream: **derived** from the session seed, never shared with
+     * the roster's or the operators' streams (ADR-0007 §6: those two are the only sources of
+     * truth for the session, and a third *interactive* stream would change every contact).
+     * Hashing the seed means the same seed still replays the same interference.
+     */
+    private val qrmRandom = SeededRandom(FadeSchedule.seedFor(seed, QRM_STREAM))
+
     // --- operator-visible state ------------------------------------------------------
 
     private var entry: QsoEntry = QsoEntry()
@@ -271,6 +352,7 @@ class SessionController private constructor(
         if (theirReplyAt != null && lastNowMs >= theirReplyAt!!) startTheirSend()
         if (theirSendEndsAt != null && lastNowMs >= theirSendEndsAt!!) theirSendFinished()
         if (shouldCallCq()) startStationCq()
+        tickQrm()
     }
 
     /** Plays and forgets: every cue emitted since the last drain, in transmission order. */
@@ -278,6 +360,20 @@ class SessionController private constructor(
         if (cues.isEmpty()) return emptyList()
         val drained = cues.toList()
         cues.clear()
+        return drained
+    }
+
+    /**
+     * Plays and forgets the interference, in transmission order.
+     *
+     * Deliberately a **second** stream: [drainCues] keeps exactly the contract T7 gave the
+     * screen (my sending and the station being worked, in order), and nothing the QRM does
+     * can reorder or delay it.
+     */
+    fun drainQrm(): List<QrmCue> {
+        if (qrmCues.isEmpty()) return emptyList()
+        val drained = qrmCues.toList()
+        qrmCues.clear()
         return drained
     }
 
@@ -520,6 +616,68 @@ class SessionController private constructor(
         nextCqAt = lastNowMs + duration + CQ_GAP_MS
     }
 
+    // --- the interfering station -----------------------------------------------------
+
+    /**
+     * Advances the QRM clock: one transmission at a time, then the gap, then the next
+     * transmission of the same episode, or the next episode.
+     *
+     * Everything is read from [lastNowMs] like the rest of the session, so a JVM test can
+     * step the interference through a whole configuration in milliseconds.
+     */
+    private fun tickQrm() {
+        val endsAt = qrmSendEndsAt
+        if (endsAt != null) {
+            if (lastNowMs >= endsAt) qrmSendFinished()
+            return
+        }
+        if (lastNowMs < qrmNextAt) return
+        if (qrm == null) startQrmEpisode() else qrmSendNext()
+    }
+
+    private fun startQrmEpisode() {
+        // `StationRoster` already guarantees a non-empty pool, so this draw cannot fail; if it
+        // ever did, the session would stop making stations long before the QRM noticed.
+        qrm = QrmStation.create(
+            random = qrmRandom,
+            basePitchHz = DEFAULT_PITCH_HZ,
+            hisCall = myCall,
+            pool = pool,
+        )
+        qrmIndex = 0
+        qrmSendNext()
+    }
+
+    private fun qrmSendNext() {
+        val station = qrm ?: return
+        val text = station.texts.getOrNull(qrmIndex) ?: return
+        val duration = messageDuration(text, station.speedWpm)
+        qrmCues.addLast(
+            QrmCue(
+                text = text,
+                pitchHz = station.pitchHz,
+                speedWpm = station.speedWpm,
+                level = station.level,
+                durationMs = duration,
+            ),
+        )
+        qrmSendEndsAt = lastNowMs + duration
+        qrmIndex++
+    }
+
+    private fun qrmSendFinished() {
+        qrmSendEndsAt = null
+        val station = qrm ?: return
+        if (qrmIndex >= station.texts.size) {
+            qrm = null
+            qrmIndex = 0
+            qrmNextAt = lastNowMs + QRM_GAP_MS + (qrmRandom.nextDouble() * QRM_GAP_JITTER_MS).toLong()
+        } else {
+            // `Timeout := Round(RndGaussLim(SecondsToBlocks(4), SecondsToBlocks(2)))`.
+            qrmNextAt = lastNowMs + QrmStation.gapMs(qrmRandom)
+        }
+    }
+
     // --- logging and the roster ------------------------------------------------------
 
     private fun logContact(typed: QsoEntry) {
@@ -574,6 +732,9 @@ class SessionController private constructor(
             operator = DxOperator(
                 call = added.call,
                 random = operatorRandom,
+                // T8: the roster's behaviour profile decides whether this operator LIDs
+                // (`DxStn.pas:73`, `DxOper.pas:507-527`). One operator, one stream.
+                lids = added.behaviour == BehaviourProfile.LID,
                 runMode = if (stationsOnAir > 1) RunMode.PILE_UP else RunMode.SINGLE_CALL,
                 flavour = if (config.id == ARRL_SS) OperatorFlavour.ARRL_SS else OperatorFlavour.GENERIC,
             )
@@ -587,6 +748,13 @@ class SessionController private constructor(
             nextCqAt = lastNowMs + CQ_LEAD_MS
         }
     }
+
+    // --- test seams ------------------------------------------------------------------
+    // The engine's own state. The screen reads [uiState]; these exist so a JVM test can prove
+    // the wiring the effects depend on (a LID's operator, a fluttering station).
+
+    internal val onAirStation: RosterStation? get() = station
+    internal val onAirOperator: DxOperator? get() = operator
 
     // --- small conversions -----------------------------------------------------------
 

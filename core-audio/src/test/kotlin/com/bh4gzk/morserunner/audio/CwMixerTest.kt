@@ -279,6 +279,91 @@ class CwMixerTest {
     }
 
     @Test
+    fun `the noise bed is summed into the mix, sample for sample`() {
+        // A quiet bed, so nothing reaches full scale and the sum stays linear.
+        fun bed() = NoiseBed(sampleRate = rate, bandPeak = 0.003, impulseGain = 10.0, seed = 4)
+        val frames = 2_048
+
+        val noise = FloatArray(frames)
+        bed().render(noise, frames)
+
+        val voice = CwVoice(
+            id = 1,
+            pitchHz = 600.0,
+            envelope = FloatArray(frames) { 1f },
+            level = 0.3,
+        )
+        val station = renderOne(voice, frames)
+
+        val mixer = CwMixer(sampleRate = rate, masterGain = 1.0, bed = bed())
+        assertTrue(mixer.start(voice))
+        val mixed = FloatArray(frames)
+        mixer.render(mixed, frames)
+
+        for (i in 0 until frames) {
+            assertEquals(
+                station[i].toDouble() + noise[i].toDouble(),
+                mixed[i].toDouble(),
+                1e-6,
+                "sample $i is not station + band",
+            )
+        }
+    }
+
+    @Test
+    fun `a mixer with a bed is silent only when the bed is`() {
+        val frames = 1_024
+
+        val noisy = FloatArray(frames)
+        CwMixer(sampleRate = rate, masterGain = 1.0, bed = NoiseBed(sampleRate = rate, seed = 8))
+            .render(noisy, frames)
+        var energy = 0.0
+        for (value in noisy) energy += value.toDouble() * value
+        assertTrue(energy > 0.0, "the band is dead: a QRN session would sound like a clean generator")
+
+        val silent = FloatArray(frames)
+        CwMixer(sampleRate = rate, masterGain = 1.0).render(silent, frames)
+        for (value in silent) assertEquals(0f, value, "a mixer without a bed must be silent")
+    }
+
+    @Test
+    fun `the render path allocates nothing with a noise bed`() {
+        val bean = java.lang.management.ManagementFactory.getThreadMXBean()
+            as com.sun.management.ThreadMXBean
+        assertTrue(bean.isThreadAllocatedMemorySupported, "this JVM cannot measure per-thread allocation")
+
+        val frames = 512
+        val mixer = CwMixer(
+            sampleRate = rate,
+            maxVoices = 4,
+            masterGain = 1.0 / 8,
+            bed = NoiseBed(sampleRate = rate, seed = 9),
+        )
+        val longEnvelope = FloatArray(rate * 90) { 1f }
+        for (id in 0 until 4) {
+            mixer.start(
+                CwVoice(
+                    id = id,
+                    pitchHz = 600.0 + id * 40,
+                    envelope = longEnvelope,
+                    level = 0.8,
+                    gainTargets = FloatArray(64) { 0.7f },
+                    gainStepSamples = 1200,
+                ),
+            )
+        }
+        val out = FloatArray(frames)
+        val thread = Thread.currentThread().id
+
+        repeat(2_000) { mixer.render(out, frames) }
+        val before = bean.getThreadAllocatedBytes(thread)
+        repeat(5_000) { mixer.render(out, frames) }
+        val allocated = bean.getThreadAllocatedBytes(thread) - before
+
+        assertTrue(allocated < 64 * 1024, "the audio path allocated $allocated bytes over 5000 blocks")
+    }
+
+    @Test
     fun `pcm conversion clamps instead of wrapping around`() {
         val from = floatArrayOf(0f, 0.25f, -0.25f, 2f, -2f)
         val into = ShortArray(5)

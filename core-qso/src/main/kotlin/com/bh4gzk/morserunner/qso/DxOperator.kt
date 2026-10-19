@@ -176,7 +176,8 @@ class DxOperator(
     val call: String,
     initialState: OperatorState = OperatorState.NEED_PREV_END,
     private val random: SeededRandom,
-    private val lids: Boolean = false,
+    /** LIDs mis-copy calls (`DxOper.pas:507-527`); the roster decides which stations are. */
+    val lids: Boolean = false,
     private val runMode: RunMode = RunMode.PILE_UP,
     private val flavour: OperatorFlavour = OperatorFlavour.GENERIC,
 ) {
@@ -696,17 +697,13 @@ class DxOperator(
      * `RndGaussLim(mean, limit)`: a Gaussian with `sigma = limit/2`, re-drawn until it lands
      * inside `±limit` (`RndFunc.pas:46-60`). The rejection loop is why the number of draws
      * varies — still deterministic, still replayable.
+     *
+     * The distribution itself lives in [gaussLimited] so that the operator and [QrmStation]
+     * cannot drift into two different "limited Gaussians"; the draws come from this
+     * operator's own stream, in the same order as before.
      */
-    private fun limitedGaussian(mean: Double, limit: Double): Double {
-        if (limit <= 0.0) return mean
-        while (true) {
-            val first = positiveDraw()
-            val normal = kotlin.math.sqrt(-2.0 * kotlin.math.ln(first)) *
-                kotlin.math.cos(TWO_PI * random.nextDouble())
-            val value = normal * 0.5 * limit
-            if (kotlin.math.abs(value) <= limit) return mean + value
-        }
-    }
+    private fun limitedGaussian(mean: Double, limit: Double): Double =
+        gaussLimited(random, mean, limit)
 
     /** A draw in `(0, 1)`: `ln(0)` is `-inf` and would make the distributions infinite. */
     private fun positiveDraw(): Double {

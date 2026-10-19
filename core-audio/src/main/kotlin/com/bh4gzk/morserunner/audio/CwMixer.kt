@@ -31,11 +31,15 @@ import kotlin.math.sin
  *   so `Σ level ≤ 8` and a master gain of `1/8` makes digital clipping unreachable. The
  *   user-facing volume question belongs to T9's settings, upstream answers it with an
  *   AGC (`Contest.pas:139-144`).
+ * @param bed the band's background noise (spec §7's QRN), summed into every block before
+ *   the master gain. `null` (the default) is a clean generator; upstream's QRN is a
+ *   checkbox that starts off, and this is the same switch one layer down.
  */
 class CwMixer(
     val sampleRate: Int = 48_000,
     val maxVoices: Int = 8,
     val masterGain: Double = 1.0 / 8.0,
+    private val bed: NoiseBed? = null,
 ) {
 
     init {
@@ -107,6 +111,8 @@ class CwMixer(
         require(frames in 0..out.size) { "frames out of range: $frames / ${out.size}" }
         commands.drain(commandConsumer)
         java.util.Arrays.fill(out, 0, frames, 0f)
+        // The band first: upstream sums its noise into the same block the stations add to.
+        if (bed != null) bed.render(out, frames)
         for (voice in voices) {
             if (voice.active) renderVoice(voice, out, frames)
         }

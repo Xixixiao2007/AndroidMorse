@@ -33,6 +33,11 @@ import com.bh4gzk.morserunner.expr.CallFacts
  * The operator's identity is a placeholder, not personal data: `W1AW` is upstream's default
  * operator (`Ini.pas`) and its CQ zone comes from the exchange defaults or the DXCC table. T9
  * owns the settings screen that replaces it.
+ *
+ * **The session runs noisy** (T8): QSB/flutter, LID operators, the QRN noise bed and the
+ * occasional QRM station are on by default — at `SessionController.start`'s defaults, since a
+ * realism effect that is compiled but never heard proves nothing. The band, the flutter share
+ * and the QRM rate are T9's settings; the levels live in `NoiseBed`/`FadeSchedule`.
  */
 object SessionBootstrap {
 

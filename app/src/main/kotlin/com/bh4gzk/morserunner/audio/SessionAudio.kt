@@ -5,6 +5,7 @@ import com.bh4gzk.morserunner.contest.FadeProfile
 import com.bh4gzk.morserunner.contest.GeneratedExchange
 import com.bh4gzk.morserunner.contest.RosterStation
 import com.bh4gzk.morserunner.session.AudioCue
+import com.bh4gzk.morserunner.session.QrmCue
 import java.io.Closeable
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -19,6 +20,10 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * My own sending is monitored through the same synthesizer (spec §7) at a fixed pitch; a
  * station is played at its own speed, pitch, level and fade.
+ *
+ * The interfering station (spec §7's QRM) arrives on its own cue type and is played as a
+ * steady signal at its own pitch: it has no fade, and it is never mistaken for the station
+ * being worked.
  */
 class SessionAudio(
     private val engine: CwAudioEngine,
@@ -58,6 +63,20 @@ class SessionAudio(
             val station = cue.station ?: myStation
             val id = voiceIds.getAndIncrement()
             engine.play(stationAudio.voice(station, id, cue.text, ROOT_SEED))
+        }
+    }
+
+    /**
+     * Queues one transmission of the interfering station ([QrmCue]) for playback.
+     *
+     * Kept apart from [play] so the QSO stream's order can never be disturbed by it, and
+     * played as a plain [StationAudio.signal] because `QrmStn.pas` has no QSB.
+     */
+    fun playQrm(cue: QrmCue) {
+        if (closed || cue.text.isBlank()) return
+        worker.execute {
+            val id = voiceIds.getAndIncrement()
+            engine.play(stationAudio.signal(id, cue.text, cue.pitchHz, cue.speedWpm, cue.level))
         }
     }
 

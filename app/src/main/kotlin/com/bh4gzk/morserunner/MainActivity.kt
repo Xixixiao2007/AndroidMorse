@@ -8,6 +8,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
 import com.bh4gzk.morserunner.audio.CwAudioEngine
+import com.bh4gzk.morserunner.audio.NoiseBed
 import com.bh4gzk.morserunner.audio.SessionAudio
 import com.bh4gzk.morserunner.audio.StationAudio
 import com.bh4gzk.morserunner.data.StationAssets
@@ -40,7 +41,9 @@ class MainActivity : ComponentActivity() {
             startMs = System.currentTimeMillis(),
         )
         val audio = SessionAudio(
-            engine = CwAudioEngine(),
+            // T8: the band is on. The bed's seed is the session's, so the noise a session
+            // hears is as replayable as the stations in it; T9's settings expose the level.
+            engine = CwAudioEngine(bed = NoiseBed(seed = SESSION_SEED)),
             stationAudio = StationAudio(),
             myCall = SessionBootstrap.DEFAULT_MY_CALL,
             mySpeedWpm = SessionController.DEFAULT_SPEED_WPM,

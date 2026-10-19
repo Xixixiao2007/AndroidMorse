@@ -115,6 +115,9 @@ fun SessionRoot(controller: SessionController, audio: SessionAudio, note: String
         while (true) {
             controller.tick(System.currentTimeMillis())
             for (cue in controller.drainCues()) audio.play(cue)
+            // The interference is its own stream (spec §7's QRM): it can never reorder the
+            // QSO's cues, and it is a steady signal, not a fading station.
+            for (cue in controller.drainQrm()) audio.playQrm(cue)
             ui = controller.uiState
             delay(TICK_MS)
         }

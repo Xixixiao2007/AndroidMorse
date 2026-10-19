@@ -1,6 +1,7 @@
 package com.bh4gzk.morserunner.session
 
 import com.bh4gzk.morserunner.contest.AssetCallFacts
+import com.bh4gzk.morserunner.contest.BehaviourProfile
 import com.bh4gzk.morserunner.contest.CallHistoryFile
 import com.bh4gzk.morserunner.contest.ContestConfig
 import com.bh4gzk.morserunner.contest.ContestLibrary
@@ -8,8 +9,10 @@ import com.bh4gzk.morserunner.contest.HistoryLoad
 import com.bh4gzk.morserunner.contest.LoadResult
 import com.bh4gzk.morserunner.data.DxccList
 import com.bh4gzk.morserunner.expr.CallFacts
+import com.bh4gzk.morserunner.qso.QrmStation
 import com.bh4gzk.morserunner.qso.QsoMessage
 import com.bh4gzk.morserunner.qso.QsoState
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -50,6 +53,7 @@ class SessionControllerTest {
     private fun session(
         history: CallHistoryFile = oneCall,
         seed: Long = 7L,
+        flutter: Boolean = true,
     ): SessionController = SessionController.start(
         config = cqww,
         pool = history,
@@ -61,6 +65,7 @@ class SessionControllerTest {
         seed = seed,
         startMs = 0L,
         speedWpm = 25,
+        flutter = flutter,
     )
 
     // --- entry and Enter -------------------------------------------------------------
@@ -256,6 +261,100 @@ class SessionControllerTest {
             val reply = controller.drainCues().single().text
             return listOf(controller.uiState.stationCall, reply)
         }
+        assertEquals(run(), run())
+    }
+
+    // --- the realism effects (T8) -----------------------------------------------------
+
+    @Test
+    fun `the session gives its stations flutter, and only when it is enabled`() {
+        // Upstream `Ini.Flutter` decides whether 30 % of stations get `3 + Random*30`
+        // instead of the QSB bandwidth (`DxStn.pas:77-79`). If the controller forgot to
+        // pass the setting on, the effect would be compiled and never heard.
+        val fluttering = (1L..40L).count { session(seed = it).onAirStation?.fade?.flutter == true }
+        assertTrue(fluttering > 0, "no station fluttered over 40 seeds")
+
+        val enabled = session(seed = 3)
+        assertTrue(enabled.onAirStation != null, "no station on the air")
+        for (seed in 1L..20L) {
+            assertTrue(
+                session(seed = seed, flutter = false).onAirStation?.fade?.flutter != true,
+                "seed $seed: a station fluttered with flutter disabled",
+            )
+        }
+    }
+
+    @Test
+    fun `a LID station gets a LID operator, and a normal station does not`() {
+        var lids = 0
+        var normal = 0
+        for (seed in 1L..60L) {
+            val controller = session(seed = seed)
+            val station = controller.onAirStation ?: error("seed $seed: no station on the air")
+            val operator = controller.onAirOperator ?: error("seed $seed: no operator for the station")
+            assertEquals(
+                station.behaviour == BehaviourProfile.LID,
+                operator.lids,
+                "seed $seed: station ${station.call} is ${station.behaviour}, operator.lids=${operator.lids}",
+            )
+            if (station.behaviour == BehaviourProfile.LID) lids++ else normal++
+        }
+        assertTrue(lids > 0, "no LID among 60 seeds: the 10 % draw is wired wrong")
+        assertTrue(normal > 0, "every station was a LID")
+    }
+
+    @Test
+    fun `the interfering station transmits off frequency and never enters the QSO`() {
+        val controller = session()
+        val interference = mutableListOf<QrmCue>()
+        var now = 0L
+        while (now <= 120_000L) {
+            controller.tick(now)
+            interference += controller.drainQrm()
+            now += 100
+        }
+
+        assertTrue(interference.isNotEmpty(), "no QRM in two minutes of a QRN/QRM session")
+        for (cue in interference) {
+            val offset = abs(cue.pitchHz - SessionController.DEFAULT_PITCH_HZ)
+            assertTrue(
+                offset in QrmStation.MIN_OFFSET_HZ..QrmStation.MAX_OFFSET_HZ,
+                "'${cue.text}' sits $offset Hz from the receiver: not off-frequency",
+            )
+            assertTrue(cue.speedWpm in 30..50, "'${cue.text}' at ${cue.speedWpm} WPM is not a QRM station")
+            assertTrue(
+                cue.text.startsWith("QRL") || cue.text.contains("CQ CQ TEST") || cue.text.endsWith("QSY QSY"),
+                "unexpected QRM text '${cue.text}'",
+            )
+            assertTrue(cue.durationMs > 0)
+        }
+
+        // It is not one of the QSO's transmissions, and it does not become the station
+        // being worked, the last thing heard, or a logged contact.
+        val qsoTexts = controller.drainCues().map { it.text }
+        assertTrue(interference.none { it.text in qsoTexts }, "the QRM leaked into the QSO cue stream")
+        assertEquals(QsoState.Idle, controller.uiState.qsoState)
+        assertEquals(0, controller.uiState.qsos)
+        assertTrue(
+            interference.none { it.text == controller.uiState.lastHeard },
+            "the QRM was attributed to the worked station",
+        )
+    }
+
+    @Test
+    fun `the same seed replays the same interference`() {
+        fun run(): List<String> {
+            val controller = session(seed = 21)
+            val texts = mutableListOf<String>()
+            var now = 0L
+            while (now <= 90_000L) {
+                controller.tick(now)
+                texts += controller.drainQrm().map { it.text }
+                now += 250
+            }
+            return texts
+        }
+        assertTrue(run().isNotEmpty(), "the replay test saw no QRM to compare")
         assertEquals(run(), run())
     }
 

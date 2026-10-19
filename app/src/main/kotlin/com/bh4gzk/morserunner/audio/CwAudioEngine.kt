@@ -28,9 +28,11 @@ class CwAudioEngine(
     val sampleRate: Int = 48_000,
     val maxVoices: Int = 8,
     private val blockFrames: Int = 1_024,
+    /** The band's background noise (spec §7's QRN); `null` is a clean generator. */
+    bed: NoiseBed? = null,
 ) : Closeable {
 
-    private val mixer = CwMixer(sampleRate = sampleRate, maxVoices = maxVoices)
+    private val mixer = CwMixer(sampleRate = sampleRate, maxVoices = maxVoices, bed = bed)
     private val floatBlock = FloatArray(blockFrames)
     private val pcmBlock = ShortArray(blockFrames)
 
