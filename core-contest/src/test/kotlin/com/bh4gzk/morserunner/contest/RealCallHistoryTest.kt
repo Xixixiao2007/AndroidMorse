@@ -109,6 +109,30 @@ class RealCallHistoryTest {
         assertTrue(history.calls.none { it.startsWith("#") || it.startsWith("!!") })
     }
 
+    @Test
+    fun `the real K1USN SST history keeps the named members and drops the rest`() {
+        val history = parse("k1usnsst")
+
+        // 15 045 lines; 4 311 carry no operator name (upstream drops them, `CWSST.pas:94`)
+        // and 16 have no QTH (`:95`), so the file's own rule leaves 10 707 rows. The shared
+        // callsign grammar drops two more (`F/OZ1CGQ`, `VYIJA` — one-letter portable prefix
+        // and a non-call), which upstream's SST loader does not check at all; ADR-0011 §8
+        // records that as the declared deviation.
+        assertEquals(10_705, history.size, "unexpected K1USN SST history size ${history.size}")
+        assertTrue(history.calls.all { history.recordFor(it)?.get("name").orEmpty().isNotEmpty() })
+        assertTrue(history.calls.all { history.recordFor(it)?.get("qth").orEmpty().isNotEmpty() })
+        // A member in a state, a DX member (the QTH is the literal 'DX'), and a name the file
+        // spells in lower case — upstream upper-cases it at load (`CWSST.pas:88-90`).
+        assertEquals("MARK", history.recordFor("N5OT")?.get("name"))
+        assertEquals("OK", history.recordFor("N5OT")?.get("qth"))
+        assertEquals("DX", history.recordFor("KP4NZ")?.get("qth"))
+        assertEquals("Josip", history.recordFor("9A5AX")?.get("name"))
+        // A row with a blank operator name is not a usable record.
+        assertNull(history.recordFor("AA0EN"), "a row with a blank name must be skipped")
+        assertNull(history.recordFor("F/OZ1CGQ"), "a one-letter portable prefix fails the call grammar")
+        assertTrue(history.calls.none { it.startsWith("#") || it.startsWith("!!") })
+    }
+
     private val knowsW1Aw = object : CallFacts {
         override fun prefix(call: String): String? = null
         override fun zone(call: String): Double? = null

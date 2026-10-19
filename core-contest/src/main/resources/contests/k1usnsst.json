@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "id": "k1usnsst",
+  "name": "K1USN Slow Speed Test",
+  "duration": { "default": 30, "min": 1, "max": 60 },
+  "runModes": ["single-call", "pile-up"],
+  "constants": {},
+  "exchange": {
+    "myFields": [
+      { "key": "name", "type": "text", "label": "Name" },
+      { "key": "qth", "type": "text", "label": "State/Prov/DX" }
+    ],
+    "their": {
+      "dice": [],
+      "bindings": {
+        "hisName": { "source": "history", "column": "name" },
+        "hisQth": { "source": "history", "column": "qth" }
+      },
+      "exch1": "upper(hisName)",
+      "exch2": "upper(hisQth)"
+    }
+  },
+  "validation": [
+    { "field": "name", "when": "not matches(upper(name), '^[A-Z][A-Z]*$') or len(name) > 10", "error": "Name must be letters, up to 10" },
+    { "field": "qth", "when": "not matches(upper(qth), '^[0-9A-Z]*$') or len(qth) > 12", "error": "State/Prov/DX must be up to 12 characters" }
+  ],
+  "scoring": {
+    "points": "1",
+    "multipliers": [
+      { "key": "ifElse(theirExch2 == 'DX', callCountry(theirCall), theirExch2)" }
+    ]
+  },
+  "callHistory": {
+    "asset": "K1USNSST.txt",
+    "delimiter": ",",
+    "skipPrefixes": ["!!Order!!", "#"],
+    "minFields": 3,
+    "columns": [
+      { "name": "call", "index": 0, "type": "callsign", "required": true },
+      { "name": "name", "index": 1, "type": "text", "required": true },
+      { "name": "qth", "index": 2, "type": "text", "required": true },
+      { "name": "userText", "index": 3, "type": "text" }
+    ],
+    "dedupe": false,
+    "requiresMyCallInDxcc": false
+  },
+  "station": {
+    "callPool": "MASTER.DTA",
+    "speedRange": { "min": "speed - 5", "max": "speed + 10" },
+    "exchangeDefaults": { "name": "BRUCE", "qth": "MA" }
+  },
+  "messages": {
+    "CQ": "CQ SST <my>",
+    "TU": "TU <my>",
+    "longCQ": "CQ CQ SST <my> <my>"
+  },
+  "capabilities": { "farnsworth": true, "requiresMyDxcc": false }
+}

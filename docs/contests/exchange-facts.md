@@ -119,14 +119,42 @@ scoring switches on “is this numeric”, which the expression language needs a
 
 Implemented in `contests/naqp.json` (ADR-0010); `NAQPCW.txt` is packaged unmodified.
 
+## K1USN Slow Speed Test — `CWSST.pas` (T11, the second per-contest ticket)
+
+| | |
+|---|---|
+| call history | `K1USNSST.txt` (15 045 lines), comma via `StrictDelimiter` (`:356-364`), **no header** (`!!Order!!` is a skip prefix, `:80-81`); columns `call,name,exch1[,usertext]` = call, name, QTH (`:54-58`); `tl.Count >= 3` (`:84`); **call, name and QTH all required** (`:93-95`); name > 10 and QTH > 5 dropped (`:96-97`); the loader sorts the *lines* (`:77`) because it binary-searches by call (`:163`) — irrelevant to a map; no dedupe, no DXCC gate |
+| my exchange | `etOpName` + `etGenericField`, captions `('Name', 'State/Prov/DX')`, default `BRUCE MA` (`Ini.pas:166-176`); name `[A-Z][A-Z]*` ≤ 10, QTH `[0-9A-Z]*` ≤ 12 (`ExchFields.pas:45,54`) |
+| DX Exch1 | the history's `Name`, upper-cased (the field is also `station.OpName`, `:174-175`) |
+| DX Exch2 | the history's third column — the state/province, or the **literal `DX`** for a non-US/VE station (`:90,176`) |
+| realism quirks | none on the exchange. Station-side wording only: `R ` prefix 10 %, greeting 20 %, `NR?`/`NAME?`/`ST?` at random (`:191-222`, `:258-272`) — station-script code, no schema key |
+| points | constant 1, regardless of QTH (`:322`) |
+| multiplier | `Exch2`; when `TrueExch2 == 'DX'` and the call is in DXCC, the entity name instead (`:326-330`) |
+| messages | `msgCQ` → `CQ SST <my>` (`:190`), `msgTU` → `TU <my>` (`:200`), `msgLongCQ` → `CQ CQ SST <my> <my>` (`:223`, sent by the QRM station) |
+| capability flags | `BFarnsworthEnabled := true` (`:121`); no DXCC-required |
+| verdict labels | name mismatch `leNAME` (`Log.pas:860`); QTH mismatch `leQTH` (`Log.pas:917-920`, the `scSst` branch of `etGenericField`) |
+| data, measured | 10 705 usable of 15 045 lines (4 311 rows have no name, 16 no QTH, 2 fail the shared call grammar); 701 DX records, 65 distinct QTH; exactly one DX call has no DXCC record (`LU1AW/D`) |
+
+Implemented in `contests/k1usnsst.json` (ADR-0011); `K1USNSST.txt` is packaged unmodified.
+
 ### Data inventory for the remaining per-contest tickets (verified 2026-10-20)
 
 | Asset | Used by | State |
 |---|---|---|
 | `CQWWCW.txt` / `SSCW.txt` / `IARU_HF.txt` | CQ WW / ARRL SS / IARU HF | packaged (T3/T6) |
 | `NAQPCW.txt` | NCJ NAQP | packaged (T10) |
+| `K1USNSST.txt` | K1USN SST | packaged (T11) — `call,name,qth`; multiplier is the QTH, or the DXCC entity when the QTH is `DX` (`CWSST.pas:326-330`) |
 | `ARRLDXCW_USDX.txt` | ARRL DX (`ArrlDx.pas`) | **not packaged** — needs the my-exchange branch (§1 of ADR-0010) |
-| `K1USNSST.txt` (15 045 lines, `call,name,state/usertext`) | K1USN SST (`CWSST.pas`) | **not packaged** — name + QTH, no serial; multiplier is `Exch2`, or the DXCC entity when `Exch2 == 'DX'` (`CWSST.pas:315-330`); `BFarnsworthEnabled := true` (`:120`) and `CQ SST <my>` (`:190`) — the first contest to exercise those two flags |
-| `FDGOTA.txt` | nothing (`grep` finds no Pascal reference) | unused reference data |
+| `JARL_ALLJA.TXT` (2 542 lines, `call,exch1[,usertext]`, `#` banner) | JARL ALL JA (`AllJa.pas:72-100`) | **not packaged** — RST `599` + `<pref><power>`; no serial; 1 point; multiplier = `Exch2` minus a trailing `L/M/H/P` (`:190-207`) |
+| `JARL_ACAG.TXT` (2 551 lines, `call,exch1[,usertext]`) | JARL ACAG (`Acag.pas:72-100`) | **not packaged** — RST + `<city\|gun\|ku><power>`; no serial |
+| `CWOPS.LIST` (6 344 lines, header-driven `!!Order!!,Call,Name,Exch1,UserText`) | CWops CWT (`CwOps.pas:74`) | **not packaged** — name + CWT number/state/country from the file; no serial |
+| `FDGOTA.txt` (17 330 lines, `!!Order!!,Call,Exch1,Sect,UserText`) | ARRL Field Day (`ArrlFd.pas:224`) | **not packaged** — class + section from the file; the two-pass club-name logic (`:227-260`) is engine code |
 | `HstResults.txt` | `Main.pas` (HST results import) | empty file; HST also needs the serial fix (F8) |
-| — | CQ WPX, CWops CWT, ARRL FD, ALL JA, ACAG | no history → `MASTER.DTA` + placeholder exchange; WPX/HST/SPRINT-style contests need F8 first |
+| — | CQ WPX | no history → `MASTER.DTA`; needs F8 (the once-computed serial) |
+
+> **T11 correction to the T3 inventory.** The rows above for ALL JA, ACAG, CWops CWT and Field
+> Day used to read "no history → `MASTER.DTA`" (and `FDGOTA.txt` "nothing — `grep` finds no
+> Pascal reference"). That was wrong: each of those contests **does** load its own file, by the
+> absolute path at `ParamStr(1) + <name>` — `AllJa.pas:72`, `Acag.pas:72`, `CwOps.pas:74`,
+> `ArrlFd.pas:224`. The files ship in `upstream/MorseRunnerCE/`. Only CQ WPX (and the serial
+> contests WPX/HST) genuinely has no history and no serial-free path.

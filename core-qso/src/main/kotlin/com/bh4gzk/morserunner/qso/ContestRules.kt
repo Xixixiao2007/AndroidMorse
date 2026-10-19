@@ -326,6 +326,9 @@ class ContestRules(
             // the field key is the config's own name, so this is naming, not a new rule.
             field.key == "name" -> QsoError.Name
             field.key == "state" -> QsoError.State
+            // K1USN SST's second field is `etGenericField`, and upstream labels a mismatch on
+            // it `leQTH` for that contest (`Log.pas:917-920`), not `leERR`.
+            field.key == "qth" -> QsoError.Qth
             "itu" in field.key || "soc" in field.key -> QsoError.Qth
             else -> QsoError.Err
         }

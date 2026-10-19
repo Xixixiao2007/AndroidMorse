@@ -102,6 +102,55 @@ class PackagedAssetsTest {
     }
 
     @Test
+    fun `the packaged K1USN SST history drives a real roster`() {
+        // T11: the second per-contest ticket. The file is upstream's `K1USNSST.txt`, copied
+        // unmodified (MPL-2.0, spec §9), and this is the whole chain the device uses:
+        // packaged bytes → the config's own callHistory spec → the roster's exchange.
+        val bundled = ContestLibrary.bundled()
+        assertTrue(bundled.errors.isEmpty(), "bundled configs failed: ${bundled.errors}")
+        val config = bundled.configs.firstOrNull { it.id == "k1usnsst" }
+        assertNotNull(config, "no bundled k1usnsst config")
+
+        val file = File(assetsDir, config.callHistory.asset)
+        assertEquals(251_728, file.length().toInt(), "the packaged history is not upstream's K1USNSST.txt")
+        val history = assertIs<HistoryLoad.Loaded>(
+            CallHistoryFile.parse(file.readText(), config.callHistory, "W1AW", data.callFacts),
+        ).history
+        // 15 045 lines; the file's own rule (a name and a QTH are required) leaves 10 707; the
+        // shared call grammar drops 2 (`F/OZ1CGQ`, `VYIJA`). ADR-0011 §8.
+        assertEquals(10_705, history.size, "unexpected K1USN SST history size ${history.size}")
+        assertEquals("MARK", history.recordFor("N5OT")?.get("name"))
+        assertEquals("OK", history.recordFor("N5OT")?.get("qth"))
+        assertEquals("DX", history.recordFor("KP4NZ")?.get("qth"))
+        // The file writes some names in lower case; upstream upper-cases at load (`CWSST.pas:88`).
+        assertEquals("Josip", history.recordFor("9A5AX")?.get("name"))
+
+        // The DXCC table answers the multiplier's `callCountry(theirCall)` for every station that
+        // sends the literal 'DX' — except the one measured below. The engine fails closed, so an
+        // unresolved call scores 0 instead of upstream's 1 (ADR-0011 §3).
+        val dxCalls = history.calls.filter { history.recordFor(it)?.get("qth") == "DX" }
+        assertTrue(dxCalls.isNotEmpty(), "the shipped file has no DX record")
+        val unresolved = dxCalls.filter { data.callFacts.country(it) == null }.toSet()
+        assertEquals(setOf("LU1AW/D"), unresolved, "unexpected DX calls with no DXCC record")
+
+        val roster = StationRoster(
+            config = config,
+            pool = history,
+            history = history,
+            settings = RosterSettings(speedWpm = 15),
+            seed = 20_261_020L,
+            calls = data.callFacts,
+        )
+        repeat(StationRoster.MAX_STATIONS) { roster.add() }
+        assertEquals(StationRoster.MAX_STATIONS, roster.size)
+        roster.stations.forEach { station ->
+            val record = assertNotNull(history.recordFor(station.call), station.call)
+            assertEquals(record["name"].orEmpty().uppercase(), station.exchange.exch1, station.call)
+            assertEquals(record["qth"].orEmpty().uppercase(), station.exchange.exch2, station.call)
+        }
+    }
+
+    @Test
     fun `the packaged DXCC list resolves the entities the contests score on`() {
         assertEquals(335, data.dxcc.size, "the DXCC table is not the shipped one")
         assertEquals("Fed. Rep. of Germany", data.callFacts.country("DL2XYZ"))
