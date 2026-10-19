@@ -23,6 +23,7 @@ dependencyResolutionManagement {
 rootProject.name = "morse-runner-android"
 
 include(":app")
+include(":core-expr")
 include(":core-contest")
 include(":core-qso")
 include(":core-audio")

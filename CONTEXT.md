@@ -1,6 +1,7 @@
 # Morse Runner → Android
 
-> Status: **building** — grilling complete, spec approved, Milestone A in progress (T1 shipped).
+> Status: **building** — grilling complete, spec approved, Milestone A in progress
+> (T1–T2 shipped; T3 next).
 > Facts below are verified against the upstream source or measured on this machine, not assumed.
 
 ## Verified facts — recon 2026-10-19
