@@ -54,6 +54,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
@@ -670,6 +671,20 @@ private fun StationGroup(
     monitorLevel: Float,
     onMonitorLevelChange: (Float) -> Unit,
 ) {
+    // The spin box keeps the digits as typed; the core is told only values that are in range, and
+    // the text is clamped when the field is left. Driving the text straight from the clamped state
+    // made typing "2" jump to 10 and the next digit land as "105" -> 60.
+    var speedText by remember { mutableStateOf(cwSpeed.toString()) }
+    LaunchedEffect(cwSpeed) {
+        if (speedText.toIntOrNull() != cwSpeed) speedText = cwSpeed.toString()
+    }
+    fun commitSpeed() {
+        val typed = speedText.toIntOrNull() ?: cwSpeed
+        val fixed = typed.coerceIn(10, 60)
+        speedText = fixed.toString()
+        if (fixed != cwSpeed) onCwSpeedChange(fixed)
+    }
+
     VclGroupBox(" Station ", widthPx = 194f, heightPx = 155f) {
         FormLabel("Call", modifier = Modifier.offset(x = 12f.px, y = 21f.px))
         VclEdit(
@@ -690,14 +705,21 @@ private fun StationGroup(
         )
         FormLabel("CW Speed", modifier = Modifier.offset(x = 12f.px, y = 46f.px))
         VclSpinEdit(
-            value = cwSpeed.toString(),
+            value = speedText,
             widthPx = 65f,
             xPx = 91f,
             yPx = 43f,
             onValueChange = { typed ->
-                typed.toIntOrNull()?.let { onCwSpeedChange(it.coerceIn(10, 60)) }
+                val digits = typed.filter { it.isDigit() }.take(2)
+                speedText = digits
+                digits.toIntOrNull()?.takeIf { it in 10..60 }?.let(onCwSpeedChange)
             },
-            onStep = { delta -> onCwSpeedChange((cwSpeed + delta).coerceIn(10, 60)) },
+            onStep = { delta ->
+                val next = ((speedText.toIntOrNull() ?: cwSpeed) + delta).coerceIn(10, 60)
+                speedText = next.toString()
+                onCwSpeedChange(next)
+            },
+            onCommit = { commitSpeed() },
         )
         FormLabel("WPM", modifier = Modifier.offset(x = 162f.px, y = 46f.px))
         FormLabel("CW Pitch", modifier = Modifier.offset(x = 13f.px, y = 76f.px))
@@ -1287,6 +1309,7 @@ private fun VclSpinEdit(
     yPx: Float,
     onValueChange: ((String) -> Unit)? = null,
     onStep: ((Int) -> Unit)? = null,
+    onCommit: (() -> Unit)? = null,
 ) {
     Box(
         Modifier
@@ -1305,6 +1328,8 @@ private fun VclSpinEdit(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onCommit?.invoke() }),
                 textStyle = TextStyle(
                     color = FormInk,
                     fontSize = 12f.pt,
@@ -1314,7 +1339,8 @@ private fun VclSpinEdit(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .fillMaxWidth()
-                    .padding(start = 3f.px, end = 12f.px),
+                    .padding(start = 3f.px, end = 12f.px)
+                    .onFocusChanged { if (!it.isFocused) onCommit?.invoke() },
             )
         }
         Column(
