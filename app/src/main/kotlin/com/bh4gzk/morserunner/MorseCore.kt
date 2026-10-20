@@ -24,4 +24,17 @@ object MorseCore {
 
     /** Config key of contest [idx] (null when the index is out of range). */
     external fun contestKey(idx: Int): String?
+
+    /**
+     * Create a contest of kind [idx] in the core and return an opaque handle (0 on failure).
+     * The object lives on the native heap until [contestFree]; this is the handle every later
+     * call (tick, score, log) will carry.
+     */
+    external fun contestStart(idx: Int): Long
+
+    /** Class name of a live contest object — the proof that the right subclass was built. */
+    external fun contestClass(handle: Long): String?
+
+    /** Release a contest created by [contestStart]. */
+    external fun contestFree(handle: Long)
 }

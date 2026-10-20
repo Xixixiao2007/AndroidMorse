@@ -49,6 +49,7 @@ private fun CoreProbeScreen() {
     var rows by remember { mutableStateOf(emptyList<String>()) }
     var tapped by remember { mutableStateOf("") }
     var tapCount by remember { mutableStateOf(0) }
+    var started by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         version = runCatching { MorseCore.version() }.getOrElse { "ERROR: ${it.message}" }
@@ -56,13 +57,31 @@ private fun CoreProbeScreen() {
             (0 until MorseCore.contestCount()).map { i ->
                 "${i + 1}. ${MorseCore.contestName(i)}  [${MorseCore.contestKey(i)}]"
             }
-        }.getOrElse { listOf("ERROR: ${it.message}") }
+        }.getOrElse { listOf("ERROR: " + it.message) }
+
+        // Proof that a real contest object can be built inside the core: the class name that
+        // comes back is the Pascal subclass (TCqWpx and friends), not a Kotlin stand-in.
+        started = runCatching {
+            val h = MorseCore.contestStart(0)
+            if (h == 0L) {
+                "contestStart(0) FAILED (core returned nil)"
+            } else {
+                val cls = MorseCore.contestClass(h)
+                MorseCore.contestFree(h)
+                "contestStart(0) -> " + cls
+            }
+        }.getOrElse { "ERROR: " + it.message }
+        android.util.Log.i("MorseCoreProbe", "started=" + started)
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("Pascal core: $version", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
-        Text("Contest definitions from the core: ${rows.size}", style = MaterialTheme.typography.bodyMedium)
+        Text("Contest definitions from the core: " + rows.size, style = MaterialTheme.typography.bodyMedium)
+        if (started.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Text(started, style = MaterialTheme.typography.titleSmall)
+        }
 
         Spacer(Modifier.height(12.dp))
         Button(
