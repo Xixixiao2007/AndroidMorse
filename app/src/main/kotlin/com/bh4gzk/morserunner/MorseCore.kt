@@ -37,4 +37,31 @@ object MorseCore {
 
     /** Release a contest created by [contestStart]. */
     external fun contestFree(handle: Long)
+
+    /**
+     * Start a run: instantiate the contest of kind [idx], set the operator callsign and clear the
+     * log. Returns an opaque handle, or 0 when the core refused.
+     */
+    external fun runStart(idx: Int, myCall: String): Long
+
+    /** Pull one audio block (mono float at [rate]) into [buf]; returns the sample count. */
+    external fun block(handle: Long, buf: FloatArray): Int
+
+    /** Send a canned message by its TStationMessage ordinal (the F1..F8 buttons). */
+    external fun send(handle: Long, msg: Int)
+
+    /** Sample rate the core produces audio at. */
+    external fun rate(): Int
+
+    /** Samples per block. */
+    external fun blockSize(): Int
+
+    /** QSOs logged so far in the current run. */
+    external fun logCount(): Int
+
+    /** One log cell (0 UTC, 1 Call, 2 Recv, 3 Sent, 4 Pref, 5 Chk, 6 Wpm). */
+    external fun logCell(row: Int, col: Int): String?
+
+    /** 0 raw points, 1 verified points, 2 raw multipliers, 3 verified multipliers. */
+    external fun score(which: Int): Int
 }

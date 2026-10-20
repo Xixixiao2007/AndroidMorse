@@ -68,3 +68,83 @@ Java_com_bh4gzk_morserunner_MorseCore_contestFree(JNIEnv *env, jclass cls, jlong
     (void)env; (void)cls;
     mr_contest_free((void *)(intptr_t)h);
 }
+
+/* ---- running a contest -------------------------------------------------- */
+extern void *mr_run_start(int idx, const char *mycall);
+extern int mr_block(void *h, float *out, int cap);
+extern void mr_send(void *h, int msg);
+extern int mr_contest_rate(void);
+extern int mr_block_size(void);
+extern int mr_log_count(void);
+extern int mr_log_cell(int row, int col, char *buf, int cap);
+extern int mr_score(int which);
+
+JNIEXPORT jlong JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_runStart(JNIEnv *env, jclass cls, jint idx, jstring call)
+{
+    const char *c;
+    void *h;
+    (void)cls;
+    c = (call == NULL) ? NULL : (*env)->GetStringUTFChars(env, call, NULL);
+    h = mr_run_start((int)idx, c);
+    if (c != NULL) (*env)->ReleaseStringUTFChars(env, call, c);
+    return (jlong)(intptr_t)h;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_block(JNIEnv *env, jclass cls, jlong h, jfloatArray buf)
+{
+    jfloat *p;
+    jint n;
+    (void)cls;
+    if (buf == NULL) return 0;
+    p = (*env)->GetFloatArrayElements(env, buf, NULL);
+    if (p == NULL) return 0;
+    n = (jint)mr_block((void *)(intptr_t)h, (float *)p, (*env)->GetArrayLength(env, buf));
+    (*env)->ReleaseFloatArrayElements(env, buf, p, 0);
+    return n;
+}
+
+JNIEXPORT void JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_send(JNIEnv *env, jclass cls, jlong h, jint msg)
+{
+    (void)env; (void)cls;
+    mr_send((void *)(intptr_t)h, (int)msg);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_rate(JNIEnv *env, jclass cls)
+{
+    (void)env; (void)cls;
+    return (jint)mr_contest_rate();
+}
+
+JNIEXPORT jint JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_blockSize(JNIEnv *env, jclass cls)
+{
+    (void)env; (void)cls;
+    return (jint)mr_block_size();
+}
+
+JNIEXPORT jint JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_logCount(JNIEnv *env, jclass cls)
+{
+    (void)env; (void)cls;
+    return (jint)mr_log_count();
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_logCell(JNIEnv *env, jclass cls, jint row, jint col)
+{
+    char buf[256];
+    (void)cls;
+    if (mr_log_cell((int)row, (int)col, buf, (int)sizeof(buf)) < 0) return NULL;
+    return (*env)->NewStringUTF(env, buf);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_score(JNIEnv *env, jclass cls, jint which)
+{
+    (void)env; (void)cls;
+    return (jint)mr_score((int)which);
+}

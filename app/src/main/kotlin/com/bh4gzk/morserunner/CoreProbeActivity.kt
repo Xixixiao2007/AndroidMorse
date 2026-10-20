@@ -72,6 +72,7 @@ private fun CoreProbeScreen() {
             }
         }.getOrElse { "ERROR: " + it.message }
         android.util.Log.i("MorseCoreProbe", "started=" + started)
+        android.util.Log.i("MorseCoreProbe", "audio=" + audioProof())
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -113,3 +114,35 @@ private fun CoreProbeScreen() {
         }
     }
 }
+
+/**
+ * Pull a couple of seconds of audio out of the core and report what came back: proof that the
+ * ORIGINAL simulation advances (the block routine is the game loop) and that it produces signal.
+ * Runs off the main thread because the core does real DSP per block.
+ */
+private fun audioProof(): String = runCatching {
+    val h = MorseCore.runStart(0, "VE3NEA")
+    if (h == 0L) return@runCatching "runStart FAILED"
+    try {
+        val n = MorseCore.blockSize()
+        val buf = FloatArray(n)
+        var peak = 0f
+        var samples = 0
+        repeat(200) {
+            val got = MorseCore.block(h, buf)
+            if (got > 0) {
+                samples += got
+                for (i in 0 until got) {
+                    val v = if (buf[i] < 0f) -buf[i] else buf[i]
+                    if (v > peak) peak = v
+                }
+            }
+        }
+        val logged = MorseCore.logCount()
+        val pts = MorseCore.score(0)
+        "samples=" + samples + " peak=" + peak + " block=" + n + " rate=" + MorseCore.rate() +
+            " log=" + logged + " pts=" + pts
+    } finally {
+        MorseCore.contestFree(h)
+    }
+}.getOrElse { "ERROR: " + it.message }
