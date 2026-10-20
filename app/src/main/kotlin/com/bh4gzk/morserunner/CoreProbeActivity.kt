@@ -171,6 +171,28 @@ private fun audioProof(): String = runCatching {
             return k
         }
 
+        // 0. Latency of a key press: blocks between the send and the first loud sample. Anything
+        //    the feed has buffered is heard before the new message, so this number is the delay
+        //    between pressing CQ and hearing it.
+        var sendLag = -1
+        MorseCore.send(h, 1)
+        var seen = 0
+        while (seen < 60 && sendLag < 0) {
+            val got = MorseCore.block(h, buf)
+            if (got > 0) {
+                var mx = 0f
+                for (i in 0 until got) {
+                    val v = if (buf[i] < 0f) -buf[i] else buf[i]
+                    if (v > mx) mx = v
+                }
+                if (mx > 5000f) sendLag = seen
+                seen++
+            } else {
+                Thread.sleep(2)
+            }
+        }
+        Thread.sleep(300)
+
         // 1. Call CQ, and listen to the operator's own signal (a 25 wpm CQ is ~4 s).
         pull(2)
         MorseCore.send(h, 1)
@@ -230,7 +252,8 @@ private fun audioProof(): String = runCatching {
         // The three captions the game loop writes (rate / clock / pile-up), read back the way the
         // form reads them. Before this call existed the rate panel showed a literal 0.
         val status = (0..2).joinToString(" ") { "\"${MorseCore.statusText(it) ?: "-"}\"" }
-        "cqPeak=$cqPeak cqSamples=$cqSamples calls=$calls cqBlocks=$cqBlocks stations=$stations " +
+        "cqPeak=$cqPeak cqSamples=$cqSamples sendLag=$sendLag calls=$calls cqBlocks=$cqBlocks " +
+            "stations=$stations " +
             "call=${call ?: "-"} exch=${e1 ?: "-"}/${e2 ?: "-"} saved=$saved log=${MorseCore.logCount()} " +
             "pts=${MorseCore.score(0)} vpts=${MorseCore.score(1)} vptsEnd=$vptsEnd waited=$waitedBlocks " +
             "mult=${MorseCore.score(2)} rms=$rms " +

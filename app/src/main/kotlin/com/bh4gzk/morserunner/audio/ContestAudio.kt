@@ -203,7 +203,10 @@ class ContestAudio {
 
         /** The float stream is in 16-bit units: peak ~3150 on the device, so /32768 is full scale. */
         const val PCM16_SCALE = 32_768f
-        const val BLOCKS_BUFFERED = 4
+        // The device buffer is pure latency: whatever is queued in it was generated before the
+        // operator pressed a key. Two blocks (~93 ms) is the smallest that stays glitch-free with
+        // the core's ring feeding it; four made every F-key feel late.
+        const val BLOCKS_BUFFERED = 2
         const val BYTES_PER_FLOAT = 4
         const val STOP_TIMEOUT_MS = 2_000L
         const val DEFAULT_RATE = 11_025

@@ -52,6 +52,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
@@ -731,10 +733,19 @@ private fun ExchangeRow(
     onExch2Change: (String) -> Unit,
     onEnter: () -> Unit,
 ) {
-    // The keyboard covers the bottom of the form, so the three fields are walked with the
-    // keyboard's own action key (Next, Next, Done). Tapping between them is not possible while
-    // the IME is up: they sit under it.
-    val focus = LocalFocusManager.current
+    // Main.pas Advance: as soon as the callsign is in, the RST is filled with 599 and the cursor
+    // goes straight to the exchange field, skipping RST — a 599 report is what goes out in almost
+    // every QSO, so the operator only types the serial. Typing a space is the phone's Enter
+    // (Main.pas FormKeyPress #13): the field that receives it advances and the space is dropped.
+    val callFocus = remember { FocusRequester() }
+    val rstFocus = remember { FocusRequester() }
+    val nrFocus = remember { FocusRequester() }
+
+    fun advanceFromCall() {
+        if (exch1.isBlank()) onExch1Change("599")
+        nrFocus.requestFocus()
+    }
+
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -743,26 +754,48 @@ private fun ExchangeRow(
             "Call",
             hisCall,
             weight = 118f,
-            onValueChange = { onHisCallChange(it.uppercase()) },
+            focusRequester = callFocus,
+            onValueChange = { typed ->
+                val advance = typed.endsWith(' ')
+                onHisCallChange((if (advance) typed.dropLast(1) else typed).uppercase())
+                if (advance) advanceFromCall()
+            },
             imeAction = ImeAction.Next,
-            onImeAction = { focus.moveFocus(FocusDirection.Next) },
+            onImeAction = { advanceFromCall() },
         )
         FieldWithLabel(
             "RST",
             exch1,
             weight = 77f,
-            onValueChange = { onExch1Change(it) },
+            focusRequester = rstFocus,
+            onValueChange = { typed ->
+                val advance = typed.endsWith(' ')
+                onExch1Change(if (advance) typed.dropLast(1) else typed)
+                if (advance) nrFocus.requestFocus()
+            },
             imeAction = ImeAction.Next,
-            onImeAction = { focus.moveFocus(FocusDirection.Next) },
+            onImeAction = { nrFocus.requestFocus() },
         )
-        // The exchange field ends the QSO: its keyboard "Done" is the original's Enter.
+        // The exchange field ends the QSO: its keyboard "Done" is the original's Enter, and the
+        // cursor goes back to the callsign for the next one (WipeBoxes sets ActiveControl = Edit1).
         FieldWithLabel(
             "Nr.",
             exch2,
             weight = 45f,
-            onValueChange = { onExch2Change(it.uppercase()) },
+            focusRequester = nrFocus,
+            onValueChange = { typed ->
+                val done = typed.endsWith(' ')
+                onExch2Change((if (done) typed.dropLast(1) else typed).uppercase())
+                if (done) {
+                    onEnter()
+                    callFocus.requestFocus()
+                }
+            },
             imeAction = ImeAction.Done,
-            onImeAction = onEnter,
+            onImeAction = {
+                onEnter()
+                callFocus.requestFocus()
+            },
         )
     }
 }
@@ -775,6 +808,7 @@ private fun RowScope.FieldWithLabel(
     onValueChange: ((String) -> Unit)? = null,
     imeAction: ImeAction = ImeAction.Default,
     onImeAction: (() -> Unit)? = null,
+    focusRequester: FocusRequester? = null,
 ) {
     Column(Modifier.weight(weight)) {
         FormLabel(label)
@@ -790,6 +824,7 @@ private fun RowScope.FieldWithLabel(
             onValueChange = onValueChange,
             imeAction = imeAction,
             onImeAction = onImeAction,
+            focusRequester = focusRequester,
         )
     }
 }
@@ -1115,6 +1150,7 @@ private fun VclEdit(
     onValueChange: ((String) -> Unit)? = null,
     imeAction: ImeAction = ImeAction.Default,
     onImeAction: (() -> Unit)? = null,
+    focusRequester: FocusRequester? = null,
 ) {
     Box(
         Modifier
@@ -1152,7 +1188,11 @@ private fun VclEdit(
                 cursorBrush = SolidColor(FormInk),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 3f.px, end = 2f.px),
+                    .padding(start = 3f.px, end = 2f.px)
+                    .then(
+                        if (focusRequester != null) Modifier.focusRequester(focusRequester)
+                        else Modifier
+                    ),
             )
         }
     }
