@@ -67,7 +67,7 @@ the core exposes it directly and the phone's UI drives it.
 | function | meaning |
 |---|---|
 | `mr_run_start(idx, mycall) -> pointer` | create the contest of kind `idx`, set the operator call, reset the log and the rendered rows. `nil` on failure. |
-| `mr_block(h, float* out, cap) -> int` | one audio block (mono, `mr_contest_rate()` Hz); returns the sample count. The float scale is the AGC/mixer output (about 16-bit units: ~3 000 on the noise floor, ~19 000 on the operator's own CQ), so divide by 32768 before playback. **One thread only.** |
+| `mr_block(h, float* out, cap) -> int` | copies the next audio block (mono, `mr_contest_rate()` Hz) out of the ring the core's own thread fills; returns the sample count, or **0 when no block is ready yet** — call again, it is not the end of the run. The float scale is the AGC/mixer output (about 16-bit units: ~3 000 on the noise floor, ~19 000 on the operator's own CQ), so divide by 32768 before playback. **One thread only.** |
 | `mr_send(h, msg)` | send a canned message by its `TStationMessage` ordinal (F1 CQ = 1, F2 exchange = 2, F3 TU = 3, F4 my call = 4, F5 his call = 5, F6 B4 = 6, F7 ? = 7, F8 NIL = 8). It goes through the form's `SendMsg` (`Main.pas:563`) — i.e. through `TStation.SendMsg` — because that is what records the message in `Me.Msg`, and `Me.Msg` is what tells the contest to put callers on the air when the message ends. |
 | `mr_set_my_call` / `mr_set_his_call` | the operator's own call / the DX call just copied. |
 | `mr_set_entry(call, exch1, exch2)` | the three typed fields of the form (`Edit1..3`): copied call, report, exchange. `Log.SaveQso` reads exactly these. |
@@ -75,6 +75,23 @@ the core exposes it directly and the phone's UI drives it.
 | `mr_set_monitor_level(h, 0..1)` | the `VolumeSlider1` of the form (`.dfm` default 0.75 = -15 dB); it is the self-monitor gain of the operator's own signal. |
 | `mr_set_data_dir(path)` | where `DXCC.LIST` and the call histories live (the APK ships them in `assets/data`, the UI copies them to `filesDir`). Without it the contest still runs, but there are no callsigns to put on the air. |
 | `mr_contest_rate` / `mr_block_size` | 11025 Hz / 512 samples. |
+
+### Where the simulation runs
+
+`TContest.GetAudio` *is* the simulation (filter, modulation, AGC, station ticks, appending finished
+QSOs). It no longer runs on the caller's thread: `headless/AudioFeed.pas` starts one thread when the
+library loads and `mr_block` is a pure consumer of the ring it fills (8 slots ≈ 0.37 s; the ring
+paces the producer, so the simulation advances exactly as fast as the device plays). A pull that
+finds it empty returns 0 immediately — the audio thread must never block on the engine.
+
+Why: a raise on a thread the RTL did not create dies inside the unwinder (measured: SIGSEGV in
+`fpc_popaddrstack`), so every engine bug was fatal on the phone. On an RTL thread it unwinds into a
+handler that records it and keeps going.
+
+**Build requirement:** `mrcore.lpr` must keep `cthreads` as the first unit in its `uses` clause.
+Without it FPC links the RTL single-threaded: there is no thread manager, so creating a thread
+aborts the process (measured: exit 232 with no tombstone) and a raise on a foreign thread kills it
+in `fpc_popaddrstack`. Both symptoms look like unrelated engine bugs; they are one missing unit.
 | `mr_log_count` / `mr_log_cell(row, col, buf, cap)` | the QSO log **as the original form rendered it**: `Log.LastQsoToScreen` formats each saved QSO per contest and appends it through `ScoreTableInsert`, so the core simply reads those rows back (0 = the row caption = UTC, 1..6 = the sub-items in the contest's own order). For CQ WPX that is `UTC, Call, RST, serial, Err, Wpm`. |
 | `mr_score(which)` | 0 raw points, 1 verified points, 2 raw multipliers, 3 verified multipliers. |
 | `mr_status_text(which, buf, cap)` | the three status captions the core's game loop writes into the desktop form, read back verbatim: 0 = the QSO rate (`n  qso/hr.`, `Log.pas:1107 ShowRate`), 1 = the run clock (`hh:nn:ss`, `Contest.pas:840`), 2 = the Pile-Up caption (`Pile-Up:  n`, `Contest.pas:842`). `-1` for an index other than 0..2. |
