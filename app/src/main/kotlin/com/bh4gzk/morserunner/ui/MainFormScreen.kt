@@ -655,12 +655,17 @@ private fun ModeAndClockRow() {
         ) {
             FormLabel("Pile-Up", sizePx = 11f, color = ModeGreen, weight = FontWeight.Bold)
         }
+        // Main.dfm:285 Panel7 is empty at design time; at run time Log.pas:1114
+        // sets its Caption to 'n  qso/hr.', so the idle value 0 is shown.
         Box(
             Modifier
                 .size(104f.px, 33f.px)
                 .background(FormFace)
                 .vclBevel(raised = false),
-        )
+            contentAlignment = Alignment.Center,
+        ) {
+            FormLabel("0  qso/hr.", sizePx = 12f)
+        }
         Spacer(Modifier.weight(1f))
         Box(
             Modifier

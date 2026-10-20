@@ -13,10 +13,6 @@
             android:name=".MainFormActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
         </activity>
         <!-- The previous session screen (T9–T18).  No longer the launcher, but
              kept launchable by name for the ticket that wires the form to the
@@ -25,7 +21,12 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
+            android:configChanges="orientation|screenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
             <activity
             android:name=".CoreProbeActivity"
             android:exported="true" />
