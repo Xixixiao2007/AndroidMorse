@@ -146,6 +146,9 @@ class MainFormController(private val audio: ContestAudio = ContestAudio()) {
     /** The last core failure already logged, so one exception is not repeated five times a second. */
     private var reportedCoreError = ""
 
+    /** The last audio-thread stage logged; see [MainFormController.poll]. */
+    private var reportedSection = Int.MIN_VALUE
+
     fun updateRunMinutes(minutes: Int) {
         runMinutes = minutes.coerceIn(MIN_RUN_MINUTES, MAX_RUN_MINUTES)
     }
@@ -310,6 +313,14 @@ class MainFormController(private val audio: ContestAudio = ContestAudio()) {
         // A failing audio block returns 0 samples (silence) rather than killing the process; this
         // is where the reason reaches logcat.
         reportCoreError()
+
+        // The audio thread's stage, logged only when it changes: if that thread dies natively the
+        // last value here is the stage it died in (there is no traceback for the Pascal frames).
+        val section = runCatching { MorseCore.debugState(handle, 20) }.getOrDefault(-1)
+        if (section != reportedSection) {
+            reportedSection = section
+            Log.i(TAG, "audio stage=$section")
+        }
     }
 
     /** The activity became visible: resume pulling blocks if a run is still live. */
