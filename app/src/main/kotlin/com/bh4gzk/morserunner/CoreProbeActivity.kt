@@ -23,6 +23,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Proof-of-wiring screen for route C (docs/adr/0020).
@@ -39,6 +41,9 @@ import androidx.compose.ui.unit.dp
 class CoreProbeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // A run without the call history has no callsigns to put on the air: DXCC.LIST and the
+        // contest histories are the same files the form installs.
+        BundledData.install(this)
         setContent { MaterialTheme { CoreProbeScreen() } }
     }
 }
@@ -50,6 +55,7 @@ private fun CoreProbeScreen() {
     var tapped by remember { mutableStateOf("") }
     var tapCount by remember { mutableStateOf(0) }
     var started by remember { mutableStateOf("") }
+    var proof by remember { mutableStateOf("(playing a CQ...)") }
 
     LaunchedEffect(Unit) {
         version = runCatching { MorseCore.version() }.getOrElse { "ERROR: ${it.message}" }
@@ -72,7 +78,11 @@ private fun CoreProbeScreen() {
             }
         }.getOrElse { "ERROR: " + it.message }
         android.util.Log.i("MorseCoreProbe", "started=" + started)
-        android.util.Log.i("MorseCoreProbe", "audio=" + audioProof())
+        // The probe plays a whole exchange (thousands of DSP blocks); keeping that on the main
+        // thread gets the process ANR-killed long before it can report anything.
+        val audio = withContext(Dispatchers.Default) { audioProof() }
+        android.util.Log.i("MorseCoreProbe", "audio=" + audio)
+        proof = audio
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -83,6 +93,8 @@ private fun CoreProbeScreen() {
             Spacer(Modifier.height(8.dp))
             Text(started, style = MaterialTheme.typography.titleSmall)
         }
+        Spacer(Modifier.height(8.dp))
+        Text(proof, style = MaterialTheme.typography.bodySmall)
 
         Spacer(Modifier.height(12.dp))
         Button(
@@ -116,9 +128,13 @@ private fun CoreProbeScreen() {
 }
 
 /**
- * Pull a couple of seconds of audio out of the core and report what came back: proof that the
- * ORIGINAL simulation advances (the block routine is the game loop) and that it produces signal.
+ * Play a CQ and report what the core actually produced: proof that the ORIGINAL send path
+ * (keyer -> envelope -> mixer -> AGC) puts signal on the wire and that a station answers it.
  * Runs off the main thread because the core does real DSP per block.
+ *
+ * Diagnostics come from `mr_debug_state` rather than from guesses:
+ *   0 stations, 1 log rows, 2 run mode, 3 operator state, 4 block, 5 last message ordinal,
+ *   6 monitor level x1000, 7 my envelope length, 8 my send position, 9 completed messages.
  */
 private fun audioProof(): String = runCatching {
     val h = MorseCore.runStart(0, "VE3NEA")
@@ -126,22 +142,67 @@ private fun audioProof(): String = runCatching {
     try {
         val n = MorseCore.blockSize()
         val buf = FloatArray(n)
-        var peak = 0f
-        var samples = 0
-        repeat(200) {
-            val got = MorseCore.block(h, buf)
-            if (got > 0) {
-                samples += got
-                for (i in 0 until got) {
-                    val v = if (buf[i] < 0f) -buf[i] else buf[i]
-                    if (v > peak) peak = v
+        var cqPeak = 0f
+        var cqSamples = 0
+
+        fun pull(blocks: Int, measurePeak: Boolean = false) {
+            repeat(blocks) {
+                val got = MorseCore.block(h, buf)
+                if (got > 0 && measurePeak) {
+                    cqSamples += got
+                    for (i in 0 until got) {
+                        val v = if (buf[i] < 0f) -buf[i] else buf[i]
+                        if (v > cqPeak) cqPeak = v
+                    }
                 }
             }
         }
-        val logged = MorseCore.logCount()
-        val pts = MorseCore.score(0)
-        "samples=" + samples + " peak=" + peak + " block=" + n + " rate=" + MorseCore.rate() +
-            " log=" + logged + " pts=" + pts
+
+        /** The operator is still transmitting (state 3 = stSending). */
+        fun sending() = MorseCore.debugState(h, 3) == 3
+
+        /** Listen until the operator's message has gone out; returns the blocks it took. */
+        fun waitDone(limit: Int = 240): Int {
+            var k = 0
+            while (sending() && k < limit) {
+                pull(10)
+                k += 10
+            }
+            return k
+        }
+
+        // 1. Call CQ, and listen to the operator's own signal (a 25 wpm CQ is ~4 s).
+        pull(2)
+        MorseCore.send(h, 1)
+        pull(120, measurePeak = true)
+        var cqBlocks = waitDone()
+
+        // 2. Keep calling until a station answers; the original forces a caller after 3 dry CQs.
+        var calls = 1
+        while (MorseCore.stationCount(h) == 0 && calls < 6) {
+            MorseCore.send(h, 1)
+            calls++
+            pull(40)
+            cqBlocks += waitDone()
+            pull(20)
+        }
+        val stations = MorseCore.stationCount(h)
+        val call = if (stations > 0) MorseCore.stationCall(h, 0) else null
+        val e1 = if (stations > 0) MorseCore.stationExch(h, 0, 0) else null
+        val e2 = if (stations > 0) MorseCore.stationExch(h, 0, 1) else null
+
+        // 3. Copy what was heard into the form and press Enter: answer, TU, append the QSO.
+        var saved = -1
+        if (call != null) {
+            MorseCore.setEntry(h, call, e1 ?: "", e2 ?: "")
+            saved = MorseCore.saveQso(h)
+            pull(80)   // let the answer and TU go out
+        }
+
+        val dbg = (0..9).joinToString("/") { MorseCore.debugState(h, it).toString() }
+        "cqPeak=$cqPeak cqSamples=$cqSamples calls=$calls cqBlocks=$cqBlocks stations=$stations " +
+            "call=${call ?: "-"} exch=${e1 ?: "-"}/${e2 ?: "-"} saved=$saved log=${MorseCore.logCount()} " +
+            "pts=${MorseCore.score(0)} mult=${MorseCore.score(2)} rate=${MorseCore.rate()} block=$n dbg=$dbg"
     } finally {
         MorseCore.contestFree(h)
     }

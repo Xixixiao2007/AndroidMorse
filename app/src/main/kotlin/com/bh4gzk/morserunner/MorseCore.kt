@@ -70,4 +70,27 @@ object MorseCore {
 
     /** Directory holding the bundled data files (DXCC.LIST and the call histories). */
     external fun setDataDir(path: String)
+
+    /** How many DX stations are calling right now (a count, not a decode). */
+    external fun stationCount(handle: Long): Int
+
+    /** The call of station [idx] as the simulation knows it (the probe drives QSOs with it). */
+    external fun stationCall(handle: Long, idx: Int): String?
+
+    /** One exchange field of station [idx]: 0 = Exch1, 1 = Exch2, 2 = its speed. Harness only. */
+    external fun stationExch(handle: Long, idx: Int, which: Int): String?
+
+    /** Monitor level 0..1, the Main.dfm VolumeSlider1 (default 0.75 = -15 dB). */
+    external fun setMonitorLevel(handle: Long, value: Float)
+
+    /** Type into the form's three edit boxes: call, exchange 1, exchange 2. */
+    external fun setEntry(handle: Long, call: String, exch1: String, exch2: String)
+
+    /** Press Enter on the form: append the QSO to the log. Returns the new log length. */
+    external fun saveQso(handle: Long): Int
+
+    /** Diagnostics for the harness: 0 stations, 1 log rows, 2 run mode, 3 operator state, 4 block,
+     *  5 last message ordinal, 6 monitor level (x1000), 7 my envelope length, 8 my send position,
+     *  9 completed operator messages. */
+    external fun debugState(handle: Long, which: Int): Int
 }

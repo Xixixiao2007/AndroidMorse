@@ -13,7 +13,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.bh4gzk.morserunner.audio.ContestAudio
 import com.bh4gzk.morserunner.ui.MainFormScreen
-import java.io.File
 
 /**
  * The phone UI, built as a reproduction of the original Windows form — now wired to the Pascal
@@ -49,7 +48,7 @@ class MainFormActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        installBundledData()
+        BundledData.install(this)
         controller = MainFormController()
         setContent { MainFormScreen(controller) }
     }
@@ -73,32 +72,8 @@ class MainFormActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    /**
-     * The core reads `DXCC.LIST` and the call histories by name from one directory
-     * ([MorseCore.setDataDir]). The APK ships them under `assets/data`; copy each into `filesDir`
-     * (idempotent: only when missing or a different size, so a newer asset replaces a stale copy)
-     * and point the core at that directory before any run can start.
-     */
-    private fun installBundledData() {
-        val dir = filesDir
-        runCatching {
-            assets.list(DATA_ASSET_DIR)?.forEach { name ->
-                val target = File(dir, name)
-                val sourceBytes = assets.open("$DATA_ASSET_DIR/$name").use { it.available().toLong() }
-                if (!target.exists() || target.length() != sourceBytes) {
-                    assets.open("$DATA_ASSET_DIR/$name").use { input ->
-                        target.outputStream().use { output -> input.copyTo(output) }
-                    }
-                }
-            }
-        }.onFailure { Log.w(TAG, "copying $DATA_ASSET_DIR from assets failed", it) }
-        runCatching { MorseCore.setDataDir(dir.absolutePath + "/") }
-            .onFailure { Log.w(TAG, "MorseCore.setDataDir failed", it) }
-    }
-
     private companion object {
         const val TAG = "MainForm"
-        const val DATA_ASSET_DIR = "data"
 
         /** Five times a second: the brief's "a few times per second", and cheap (see [MainFormController.poll]). */
         const val POLL_INTERVAL_MS = 200L
@@ -220,6 +195,40 @@ class MainFormController(private val audio: ContestAudio = ContestAudio()) {
         val current = handle
         if (current == 0L) return
         runCatching { MorseCore.setHisCall(current, text) }
+    }
+
+    /**
+     * The operator typed the three entry fields (Main.dfm Edit1..3: the copied call, the report
+     * and the exchange). `Log.SaveQso` reads exactly these, so the core has to have them.
+     */
+    fun setEntry(call: String, exch1: String, exch2: String) {
+        val current = handle
+        if (current == 0L) return
+        runCatching { MorseCore.setEntry(current, call, exch1, exch2) }
+    }
+
+    /**
+     * The Mon. Level slider (Main.dfm VolumeSlider1, 0.75 = -15 dB): the self-monitor gain of the
+     * operator's own signal. It is a contest setting, not the phone's media volume.
+     */
+    fun setMonitorLevel(value: Float) {
+        val current = handle
+        if (current == 0L) return
+        runCatching { MorseCore.setMonitorLevel(current, value.coerceIn(0f, 1f)) }
+    }
+
+    /**
+     * The Enter key: verify the copied call, answer with the DX call when it has not gone out,
+     * send TU and append the QSO to the log (`Main.pas` FormKeyPress '.' / ProcessEnter, and
+     * `mr_save_qso` on the core side). Returns the new log length, or a negative value when the
+     * core refused the call or there is no run.
+     */
+    fun saveQso(): Int {
+        val current = handle
+        if (current == 0L) return -1
+        val rows = runCatching { MorseCore.saveQso(current) }.getOrDefault(-1)
+        if (rows > 0) Log.i(TAG, "QSO saved, log rows=$rows")
+        return rows
     }
 
     /**

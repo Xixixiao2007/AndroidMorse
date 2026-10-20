@@ -177,3 +177,79 @@ Java_com_bh4gzk_morserunner_MorseCore_setDataDir(JNIEnv *env, jclass cls, jstrin
         (*env)->ReleaseStringUTFChars(env, path, c);
     }
 }
+
+extern int mr_station_count(void *h);
+
+JNIEXPORT jint JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_stationCount(JNIEnv *env, jclass cls, jlong h)
+{
+    (void)env; (void)cls;
+    return (jint)mr_station_count((void *)(intptr_t)h);
+}
+
+extern int mr_debug_state(void *h, int which);
+
+JNIEXPORT jint JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_debugState(JNIEnv *env, jclass cls, jlong h, jint which)
+{
+    (void)env; (void)cls;
+    return (jint)mr_debug_state((void *)(intptr_t)h, (int)which);
+}
+
+extern int mr_station_call(void *h, int idx, char *buf, int cap);
+
+JNIEXPORT jstring JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_stationCall(JNIEnv *env, jclass cls, jlong h, jint idx)
+{
+    char buf[64];
+    (void)cls;
+    if (mr_station_call((void *)(intptr_t)h, (int)idx, buf, (int)sizeof(buf)) < 0) return NULL;
+    return (*env)->NewStringUTF(env, buf);
+}
+
+extern int mr_station_exch(void *h, int idx, int which, char *buf, int cap);
+
+JNIEXPORT jstring JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_stationExch(JNIEnv *env, jclass cls, jlong h, jint idx, jint which)
+{
+    char buf[64];
+    (void)cls;
+    if (mr_station_exch((void *)(intptr_t)h, (int)idx, (int)which, buf, (int)sizeof(buf)) < 0) return NULL;
+    return (*env)->NewStringUTF(env, buf);
+}
+
+extern void mr_set_monitor_level(void *h, float value);
+
+JNIEXPORT void JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_setMonitorLevel(JNIEnv *env, jclass cls, jlong h, jfloat value)
+{
+    (void)env; (void)cls;
+    mr_set_monitor_level((void *)(intptr_t)h, (float)value);
+}
+
+/* Three Java strings -> the form's three edit boxes. The C side tolerates nulls. */
+extern void mr_set_entry(void *h, const char *call, const char *exch1, const char *exch2);
+
+JNIEXPORT void JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_setEntry(JNIEnv *env, jclass cls, jlong h,
+                                               jstring call, jstring exch1, jstring exch2)
+{
+    const char *c = NULL, *e1 = NULL, *e2 = NULL;
+    (void)cls;
+    if (call != NULL) c = (*env)->GetStringUTFChars(env, call, NULL);
+    if (exch1 != NULL) e1 = (*env)->GetStringUTFChars(env, exch1, NULL);
+    if (exch2 != NULL) e2 = (*env)->GetStringUTFChars(env, exch2, NULL);
+    mr_set_entry((void *)(intptr_t)h, c, e1, e2);
+    if (c != NULL) (*env)->ReleaseStringUTFChars(env, call, c);
+    if (e1 != NULL) (*env)->ReleaseStringUTFChars(env, exch1, e1);
+    if (e2 != NULL) (*env)->ReleaseStringUTFChars(env, exch2, e2);
+}
+
+extern int mr_save_qso(void *h);
+
+JNIEXPORT jint JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_saveQso(JNIEnv *env, jclass cls, jlong h)
+{
+    (void)env; (void)cls;
+    return (jint)mr_save_qso((void *)(intptr_t)h);
+}

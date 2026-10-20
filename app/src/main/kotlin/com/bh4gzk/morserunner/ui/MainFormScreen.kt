@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -23,6 +25,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -31,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,11 +50,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
@@ -202,11 +211,25 @@ fun MainFormScreen(controller: MainFormController, modifier: Modifier = Modifier
     var contestIndex by remember { mutableIntStateOf(0) }
     var myCall by remember { mutableStateOf("VE3NEA") }
     var hisCall by remember { mutableStateOf("") }
+    // Main.dfm Edit2 (report) and Edit3 (number/exchange). The operator types what he copies;
+    // Log.SaveQso reads these three fields, so they are part of the QSO, not decoration.
+    var exch1 by remember { mutableStateOf("") }
+    var exch2 by remember { mutableStateOf("") }
+    // Main.dfm VolumeSlider1: 0.75 = -15 dB. It is the self-monitor gain of the operator's own
+    // signal, so it belongs to the core, not to the phone's media volume.
+    var monitorLevel by remember { mutableFloatStateOf(0.75f) }
 
     // Every edit of the Call field goes to the core; the handle key makes this run
     // once more when a fresh run starts, so the new contest learns the text.
     LaunchedEffect(hisCall, controller.handle) {
         if (controller.handle != 0L) controller.setHisCall(hisCall)
+    }
+    // The three entry fields as one unit: SaveQso reads all of them at once.
+    LaunchedEffect(hisCall, exch1, exch2, controller.handle) {
+        if (controller.handle != 0L) controller.setEntry(hisCall, exch1, exch2)
+    }
+    LaunchedEffect(monitorLevel, controller.handle) {
+        if (controller.handle != 0L) controller.setMonitorLevel(monitorLevel)
     }
 
     val density = LocalDensity.current
@@ -276,14 +299,37 @@ fun MainFormScreen(controller: MainFormController, modifier: Modifier = Modifier
 
                     // Panel9 row 2: Main.dfm:700 GroupBox1 + Main.dfm:622 GroupBox3.
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        StationGroup(myCall = myCall, onMyCallChange = { myCall = it })
+                        StationGroup(
+                            myCall = myCall,
+                            onMyCallChange = { myCall = it },
+                            monitorLevel = monitorLevel,
+                            onMonitorLevelChange = { monitorLevel = it },
+                        )
                         BandConditionsGroup()
                     }
 
                     Spacer(Modifier.height(6.dp))
 
                     // Panel1, left third: Main.dfm:178-233 Edit1..3 and their labels.
-                    ExchangeRow(hisCall = hisCall, onHisCallChange = { hisCall = it })
+                    ExchangeRow(
+                        hisCall = hisCall,
+                        exch1 = exch1,
+                        exch2 = exch2,
+                        onHisCallChange = { hisCall = it },
+                        onExch1Change = { exch1 = it },
+                        onExch2Change = { exch2 = it },
+                        // The phone has no Enter key on the form: the keyboard's Done action on the
+                        // last field is the same gesture (Main.pas FormKeyPress #13 / ProcessEnter).
+                        onEnter = {
+                            val rows = controller.saveQso()
+                            if (rows > 0) {
+                                hisCall = ""
+                                exch1 = ""
+                                exch2 = ""
+                                controller.setEntry("", "", "")
+                            }
+                        },
+                    )
 
                     Spacer(Modifier.height(4.dp))
 
@@ -597,7 +643,12 @@ private fun RunControlsPanel(controller: MainFormController, onToggleRun: () -> 
 // The Call field is the operator call `mr_run_start` receives (Main.dfm Edit4).
 // ---------------------------------------------------------------------------
 @Composable
-private fun StationGroup(myCall: String, onMyCallChange: (String) -> Unit) {
+private fun StationGroup(
+    myCall: String,
+    onMyCallChange: (String) -> Unit,
+    monitorLevel: Float,
+    onMonitorLevelChange: (Float) -> Unit,
+) {
     var qsk by remember { mutableStateOf(false) }
     VclGroupBox(" Station ", widthPx = 194f, heightPx = 155f) {
         FormLabel("Call", modifier = Modifier.offset(x = 12f.px, y = 21f.px))
@@ -650,6 +701,8 @@ private fun StationGroup(myCall: String, onMyCallChange: (String) -> Unit) {
         FormLabel("Mon. Level", modifier = Modifier.offset(x = 12f.px, y = 134f.px))
         // Main.dfm:742 VolumeSlider1 (92,129,60x20), Value = 0.75, Db = -15.
         VclVolumeSlider(
+            value = monitorLevel,
+            onValueChange = onMonitorLevelChange,
             modifier = Modifier
                 .offset(x = 92f.px, y = 129f.px)
                 .size(60f.px, 20f.px),
@@ -689,7 +742,19 @@ private fun BandConditionsGroup() {
 // `MorseCore.setHisCall`.  RST/Nr. stay static: the ABI has no setter for them.
 // ---------------------------------------------------------------------------
 @Composable
-private fun ExchangeRow(hisCall: String, onHisCallChange: (String) -> Unit) {
+private fun ExchangeRow(
+    hisCall: String,
+    exch1: String,
+    exch2: String,
+    onHisCallChange: (String) -> Unit,
+    onExch1Change: (String) -> Unit,
+    onExch2Change: (String) -> Unit,
+    onEnter: () -> Unit,
+) {
+    // The keyboard covers the bottom of the form, so the three fields are walked with the
+    // keyboard's own action key (Next, Next, Done). Tapping between them is not possible while
+    // the IME is up: they sit under it.
+    val focus = LocalFocusManager.current
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -699,9 +764,26 @@ private fun ExchangeRow(hisCall: String, onHisCallChange: (String) -> Unit) {
             hisCall,
             weight = 118f,
             onValueChange = { onHisCallChange(it.uppercase()) },
+            imeAction = ImeAction.Next,
+            onImeAction = { focus.moveFocus(FocusDirection.Next) },
         )
-        FieldWithLabel("RST", "", weight = 77f)
-        FieldWithLabel("Nr.", "", weight = 45f)
+        FieldWithLabel(
+            "RST",
+            exch1,
+            weight = 77f,
+            onValueChange = { onExch1Change(it) },
+            imeAction = ImeAction.Next,
+            onImeAction = { focus.moveFocus(FocusDirection.Next) },
+        )
+        // The exchange field ends the QSO: its keyboard "Done" is the original's Enter.
+        FieldWithLabel(
+            "Nr.",
+            exch2,
+            weight = 45f,
+            onValueChange = { onExch2Change(it.uppercase()) },
+            imeAction = ImeAction.Done,
+            onImeAction = onEnter,
+        )
     }
 }
 
@@ -711,6 +793,8 @@ private fun RowScope.FieldWithLabel(
     value: String,
     weight: Float,
     onValueChange: ((String) -> Unit)? = null,
+    imeAction: ImeAction = ImeAction.Default,
+    onImeAction: (() -> Unit)? = null,
 ) {
     Column(Modifier.weight(weight)) {
         FormLabel(label)
@@ -724,6 +808,8 @@ private fun RowScope.FieldWithLabel(
             fontPx = 16f,
             fillWidth = true,
             onValueChange = onValueChange,
+            imeAction = imeAction,
+            onImeAction = onImeAction,
         )
     }
 }
@@ -1044,6 +1130,8 @@ private fun VclEdit(
     fontPx: Float = 13f,
     fillWidth: Boolean = false,
     onValueChange: ((String) -> Unit)? = null,
+    imeAction: ImeAction = ImeAction.Default,
+    onImeAction: (() -> Unit)? = null,
 ) {
     Box(
         Modifier
@@ -1067,6 +1155,11 @@ private fun VclEdit(
                 value = text,
                 onValueChange = onValueChange,
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = imeAction),
+                keyboardActions = KeyboardActions(
+                    onNext = { onImeAction?.invoke() },
+                    onDone = { onImeAction?.invoke() },
+                ),
                 textStyle = TextStyle(
                     color = FormInk,
                     fontSize = fontPx.pt,
@@ -1259,11 +1352,28 @@ private fun VclSpeedButton(
 
 /** `TVolumeSlider` (60 x 20, Value 0.75): groove plus a raised thumb. */
 @Composable
-private fun VclVolumeSlider(modifier: Modifier = Modifier) {
-    Canvas(modifier.background(FormFace).vclBevel(raised = false)) {
+private fun VclVolumeSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val setFromX: (Float, Float) -> Unit = { x, width ->
+        onValueChange(((x - 3f) / (width - 12f)).coerceIn(0f, 1f))
+    }
+    Canvas(
+        modifier
+            .background(FormFace)
+            .vclBevel(raised = false)
+            .pointerInput(Unit) {
+                detectTapGestures { offset -> setFromX(offset.x, size.width.toFloat()) }
+            }
+            .pointerInput(Unit) {
+                detectDragGestures { change, _ -> setFromX(change.position.x, size.width.toFloat()) }
+            },
+    ) {
         val y = size.height / 2f
         drawLine(FormEdge, Offset(3f, y), Offset(size.width - 3f, y), 1f)
-        val thumbX = 3f + (size.width - 12f) * 0.75f
+        val thumbX = 3f + (size.width - 12f) * value.coerceIn(0f, 1f)
         drawRect(FormHighlight, topLeft = Offset(thumbX, 2f), size = Size(8f, size.height - 4f))
         drawRect(FormEdge, topLeft = Offset(thumbX, 2f), size = Size(8f, size.height - 4f), style = androidx.compose.ui.graphics.drawscope.Stroke(1f))
     }

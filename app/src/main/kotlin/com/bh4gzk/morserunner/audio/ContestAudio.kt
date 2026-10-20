@@ -3,6 +3,8 @@ package com.bh4gzk.morserunner.audio
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.util.Log
+import kotlin.math.abs
 import com.bh4gzk.morserunner.MorseCore
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
@@ -77,6 +79,11 @@ class ContestAudio {
         worker = thread(name = "contest-audio", isDaemon = true) {
             val raw = FloatArray(blockFrames)
             val out = FloatArray(blockFrames)
+            // One debug line per second of audio: the run's PEAK level, so logcat can show that a
+            // message actually went out (peak 0 while the operator sends = silent transmit path)
+            // instead of leaving "is there any audio" to the ear of whoever is debugging.
+            var peak = 0f
+            var sinceLog = 0
             while (running && generation.get() == mine && !Thread.currentThread().isInterrupted) {
                 // The only call site of MorseCore.block in the app — see the class comment.
                 val count = runCatching { MorseCore.block(handle, raw) }.getOrDefault(0)
@@ -85,7 +92,17 @@ class ContestAudio {
                     pause(5L)
                     continue
                 }
-                for (i in 0 until count) out[i] = (raw[i] / PCM16_SCALE).coerceIn(-1f, 1f)
+                for (i in 0 until count) {
+                    val v = raw[i]
+                    if (abs(v) > peak) peak = abs(v)
+                    out[i] = (v / PCM16_SCALE).coerceIn(-1f, 1f)
+                }
+                sinceLog += count
+                if (sinceLog >= sampleRate) {
+                    Log.d(TAG, "peak=${peak.toInt()} block=${count} samples=${samples.get()}")
+                    peak = 0f
+                    sinceLog = 0
+                }
                 if (device != null) {
                     writeAll(device, out, count, mine)
                 } else {
@@ -172,6 +189,8 @@ class ContestAudio {
     }
 
     private companion object {
+        const val TAG = "ContestAudio"
+
         /** The float stream is in 16-bit units: peak ~3150 on the device, so /32768 is full scale. */
         const val PCM16_SCALE = 32_768f
         const val BLOCKS_BUFFERED = 4
