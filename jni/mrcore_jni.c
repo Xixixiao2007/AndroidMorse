@@ -232,12 +232,29 @@ Java_com_bh4gzk_morserunner_MorseCore_stationExch(JNIEnv *env, jclass cls, jlong
 }
 
 extern void mr_set_monitor_level(void *h, float value);
+extern void mr_set_setting(void *h, int kind, int value);
+extern int  mr_get_setting(int kind);
 
 JNIEXPORT void JNICALL
 Java_com_bh4gzk_morserunner_MorseCore_setMonitorLevel(JNIEnv *env, jclass cls, jlong h, jfloat value)
 {
     (void)env; (void)cls;
     mr_set_monitor_level((void *)(intptr_t)h, (float)value);
+}
+
+/* Station-panel settings: kind 0 speed, 1 pitch, 2 bandwidth, 3 QSK. */
+JNIEXPORT void JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_setSetting(JNIEnv *env, jclass cls, jlong h, jint kind, jint value)
+{
+    (void)env; (void)cls;
+    mr_set_setting((void *)(intptr_t)h, (int)kind, (int)value);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_getSetting(JNIEnv *env, jclass cls, jint kind)
+{
+    (void)env; (void)cls;
+    return (jint)mr_get_setting((int)kind);
 }
 
 /* Three Java strings -> the form's three edit boxes. The C side tolerates nulls. */

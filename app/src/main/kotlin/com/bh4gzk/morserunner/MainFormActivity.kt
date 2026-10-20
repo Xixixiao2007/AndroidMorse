@@ -234,6 +234,19 @@ class MainFormController(private val audio: ContestAudio = ContestAudio()) {
      * The Mon. Level slider (Main.dfm VolumeSlider1, 0.75 = -15 dB): the self-monitor gain of the
      * operator's own signal. It is a contest setting, not the phone's media volume.
      */
+    /**
+     * Station panel: 0 = CW speed, 1 = pitch, 2 = bandwidth, 3 = QSK. Returns what the core kept
+     * (`mr_get_setting`), so a control that does nothing shows up in logcat as value -> same value.
+     */
+    fun setSetting(kind: Int, value: Int): Int {
+        // A zero handle is fine: speed/pitch/QSK live in the core's Ini and bandwidth is re-derived
+        // when the next run is created. Refusing here is what made the panel look dead before a run.
+        runCatching { MorseCore.setSetting(handle, kind, value) }
+        val kept = runCatching { MorseCore.getSetting(kind) }.getOrDefault(-1)
+        Log.i("MainForm", "setting $kind=$value -> $kept")
+        return kept
+    }
+
     fun setMonitorLevel(value: Float) {
         val current = handle
         if (current == 0L) return

@@ -207,6 +207,12 @@ fun MainFormScreen(controller: MainFormController, modifier: Modifier = Modifier
     // worked (Edit1), which the core keeps in Me.HisCall.
     var contestIndex by remember { mutableIntStateOf(0) }
     var myCall by remember { mutableStateOf("VE3NEA") }
+    // Station panel state. The defaults are the core's own (Ini.Wpm 25, Pitch 600, BandWidth 500,
+    // Qsk false); every change is pushed straight into the engine and read back.
+    var cwSpeed by remember { mutableIntStateOf(25) }
+    var pitchHz by remember { mutableIntStateOf(600) }
+    var bandwidthHz by remember { mutableIntStateOf(500) }
+    var qsk by remember { mutableStateOf(false) }
     var hisCall by remember { mutableStateOf("") }
     // Main.dfm Edit2 (report) and Edit3 (number/exchange). The operator types what he copies;
     // Log.SaveQso reads these three fields, so they are part of the QSO, not decoration.
@@ -345,7 +351,15 @@ fun MainFormScreen(controller: MainFormController, modifier: Modifier = Modifier
                                 exch2 = ""
                                 controller.setEntry("", "", "")
                                 if (controller.running) controller.stopRun()
-                                else controller.startRun(contestIndex, myCall)
+                                else {
+                                    controller.startRun(contestIndex, myCall)
+                                    // The panel is set before the run exists; hand it over now so
+                                    // the first CQ already uses the chosen speed/pitch/bandwidth.
+                                    controller.setSetting(0, cwSpeed)
+                                    controller.setSetting(1, pitchHz)
+                                    controller.setSetting(2, bandwidthHz)
+                                    controller.setSetting(3, if (qsk) 1 else 0)
+                                }
                             },
                         )
                     }
@@ -357,8 +371,22 @@ fun MainFormScreen(controller: MainFormController, modifier: Modifier = Modifier
                         StationGroup(
                             myCall = myCall,
                             onMyCallChange = { myCall = it },
+                            cwSpeed = cwSpeed,
+                            onCwSpeedChange = { cwSpeed = it; controller.setSetting(0, it) },
+                            pitchHz = pitchHz,
+                            onPitchChange = { pitchHz = it; controller.setSetting(1, it) },
+                            bandwidthHz = bandwidthHz,
+                            onBandwidthChange = { bandwidthHz = it; controller.setSetting(2, it) },
+                            qsk = qsk,
+                            onQskToggle = {
+                                qsk = !qsk
+                                controller.setSetting(3, if (qsk) 1 else 0)
+                            },
                             monitorLevel = monitorLevel,
-                            onMonitorLevelChange = { monitorLevel = it },
+                            onMonitorLevelChange = {
+                                monitorLevel = it
+                                controller.setMonitorLevel(it)
+                            },
                         )
                         BandConditionsGroup()
                     }
@@ -631,10 +659,17 @@ private fun RunControlsPanel(controller: MainFormController, onToggleRun: () -> 
 private fun StationGroup(
     myCall: String,
     onMyCallChange: (String) -> Unit,
+    cwSpeed: Int,
+    onCwSpeedChange: (Int) -> Unit,
+    pitchHz: Int,
+    onPitchChange: (Int) -> Unit,
+    bandwidthHz: Int,
+    onBandwidthChange: (Int) -> Unit,
+    qsk: Boolean,
+    onQskToggle: () -> Unit,
     monitorLevel: Float,
     onMonitorLevelChange: (Float) -> Unit,
 ) {
-    var qsk by remember { mutableStateOf(false) }
     VclGroupBox(" Station ", widthPx = 194f, heightPx = 155f) {
         FormLabel("Call", modifier = Modifier.offset(x = 12f.px, y = 21f.px))
         VclEdit(
@@ -646,17 +681,24 @@ private fun StationGroup(
             fontPx = 13f,
             onValueChange = { onMyCallChange(it.uppercase()) },
         )
-        // Only the callsign is settable from this panel: everything else is the original's
-        // default and stays locked, so a run cannot be changed mid-contest by a stray tap.
         VclCheckBox(
             "QSK",
             xPx = 140f,
             yPx = 17f,
             checked = qsk,
-            onToggle = {},
+            onToggle = onQskToggle,
         )
         FormLabel("CW Speed", modifier = Modifier.offset(x = 12f.px, y = 46f.px))
-        VclSpinEdit(value = "25", widthPx = 65f, xPx = 91f, yPx = 43f)
+        VclSpinEdit(
+            value = cwSpeed.toString(),
+            widthPx = 65f,
+            xPx = 91f,
+            yPx = 43f,
+            onValueChange = { typed ->
+                typed.toIntOrNull()?.let { onCwSpeedChange(it.coerceIn(10, 60)) }
+            },
+            onStep = { delta -> onCwSpeedChange((cwSpeed + delta).coerceIn(10, 60)) },
+        )
         FormLabel("WPM", modifier = Modifier.offset(x = 162f.px, y = 46f.px))
         FormLabel("CW Pitch", modifier = Modifier.offset(x = 13f.px, y = 76f.px))
         // Main.dfm:806 ComboBox1, items 300..900 Hz.  ItemIndex is not set in the
@@ -666,12 +708,11 @@ private fun StationGroup(
                 "300 Hz", "350 Hz", "400 Hz", "450 Hz", "500 Hz", "550 Hz", "600 Hz",
                 "650 Hz", "700 Hz", "750 Hz", "800 Hz", "850 Hz", "900 Hz",
             ),
-            selectedIndex = 0,
-            onSelect = {},
+            selectedIndex = ((pitchHz - 300) / 50).coerceIn(0, 12),
+            onSelect = { index -> onPitchChange(300 + index * 50) },
             widthPx = 65f,
             xPx = 92f,
             yPx = 73f,
-            enabled = false,
         )
         FormLabel("RX Bandwidth", modifier = Modifier.offset(x = 12f.px, y = 106f.px))
         // Main.dfm:831 ComboBox2, items 100..600 Hz.
@@ -680,18 +721,17 @@ private fun StationGroup(
                 "100 Hz", "150 Hz", "200 Hz", "250 Hz", "300 Hz", "350 Hz",
                 "400 Hz", "450 Hz", "500 Hz", "550 Hz", "600 Hz",
             ),
-            selectedIndex = 0,
-            onSelect = {},
+            selectedIndex = ((bandwidthHz - 100) / 50).coerceIn(0, 10),
+            onSelect = { index -> onBandwidthChange(100 + index * 50) },
             widthPx = 65f,
             xPx = 92f,
             yPx = 102f,
-            enabled = false,
         )
         FormLabel("Mon. Level", modifier = Modifier.offset(x = 12f.px, y = 134f.px))
         // Main.dfm:742 VolumeSlider1 (92,129,60x20), Value = 0.75, Db = -15.
         VclVolumeSlider(
             value = monitorLevel,
-            onValueChange = { },
+            onValueChange = onMonitorLevelChange,
             modifier = Modifier
                 .offset(x = 92f.px, y = 129f.px)
                 .size(60f.px, 20f.px),

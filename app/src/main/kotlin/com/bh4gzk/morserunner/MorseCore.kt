@@ -65,6 +65,11 @@ object MorseCore {
     /** 0 raw points, 1 verified points, 2 raw multipliers, 3 verified multipliers. */
     external fun score(which: Int): Int
 
+    /** Station panel settings: 0 = CW speed, 1 = pitch Hz, 2 = bandwidth Hz, 3 = QSK. */
+    external fun setSetting(handle: Long, kind: Int, value: Int)
+
+    external fun getSetting(kind: Int): Int
+
     /**
      * One of the three status captions the core's game loop writes into the desktop form:
      * 0 = the QSO rate (`n  qso/hr.`), 1 = the run clock (`hh:nn:ss`), 2 = the Pile-Up caption
