@@ -424,15 +424,6 @@ private fun CwPane() {
     ) {
         // Placeholder: layout milestone only, no engine is running and no .lst
         // is loaded (Main.pas:2263 would load one into this pane).
-        FormLabel(
-            "K1ABC: CQ TEST K1ABC K\n" +
-                "K1ABC: K1ABC\n" +
-                "K1ABC: 5NN 05\n" +
-                "K1ABC: TU K1ABC",
-            sizePx = 13f,
-            family = FontFamily.Monospace,
-            modifier = Modifier.fillMaxWidth(),
-        )
     }
 }
 
@@ -699,8 +690,8 @@ private fun RateHistogramPanel() {
                 .padding(1.dp)
                 .background(InfoBackground),
         ) {
-            val bars = 24
-            val barW = size.width / (bars * 1.6f)
+            val bars = 0
+            val barW = if (bars > 0) size.width / (bars * 1.6f) else 0f
             val gap = barW * 0.6f
             // Baseline.
             drawLine(FormEdge, Offset(0f, size.height - 1f), Offset(size.width, size.height - 1f), 1f)
