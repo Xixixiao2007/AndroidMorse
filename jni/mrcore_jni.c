@@ -149,6 +149,19 @@ Java_com_bh4gzk_morserunner_MorseCore_score(JNIEnv *env, jclass cls, jint which)
     return (jint)mr_score((int)which);
 }
 
+/* 0 = the QSO rate, 1 = the run clock, 2 = the Pile-Up caption: the three panel texts the game
+   loop itself writes, read back so the phone shows the rate the core computed. */
+extern int mr_status_text(int which, char *buf, int cap);
+
+JNIEXPORT jstring JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_statusText(JNIEnv *env, jclass cls, jint which)
+{
+    char buf[128];
+    (void)cls;
+    if (mr_status_text((int)which, buf, (int)sizeof(buf)) < 0) return NULL;
+    return (*env)->NewStringUTF(env, buf);
+}
+
 extern void mr_set_his_call(void *h, const char *text);
 extern void mr_set_data_dir(const char *path);
 
@@ -252,4 +265,17 @@ Java_com_bh4gzk_morserunner_MorseCore_saveQso(JNIEnv *env, jclass cls, jlong h)
 {
     (void)env; (void)cls;
     return (jint)mr_save_qso((void *)(intptr_t)h);
+}
+
+/* The last Pascal exception an entry point caught. The core never lets one cross the boundary
+   (the RTL would end the process instead), so this is how a failure becomes a message. */
+extern int mr_last_error(char *buf, int cap);
+
+JNIEXPORT jstring JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_lastError(JNIEnv *env, jclass cls)
+{
+    char buf[512];
+    (void)cls;
+    if (mr_last_error(buf, (int)sizeof(buf)) < 0) return NULL;
+    return (*env)->NewStringUTF(env, buf);
 }

@@ -65,6 +65,13 @@ object MorseCore {
     /** 0 raw points, 1 verified points, 2 raw multipliers, 3 verified multipliers. */
     external fun score(which: Int): Int
 
+    /**
+     * One of the three status captions the core's game loop writes into the desktop form:
+     * 0 = the QSO rate (`n  qso/hr.`), 1 = the run clock (`hh:nn:ss`), 2 = the Pile-Up caption
+     * (`Pile-Up:  n`). Null when the index is out of range.
+     */
+    external fun statusText(which: Int): String?
+
     /** The DX call the operator copied into the Call field. */
     external fun setHisCall(handle: Long, text: String)
 
@@ -88,6 +95,13 @@ object MorseCore {
 
     /** Press Enter on the form: append the QSO to the log. Returns the new log length. */
     external fun saveQso(handle: Long): Int
+
+    /**
+     * The last exception the core caught, as `where: ClassName: Message`, or "" when none.
+     * A Pascal exception that reached a JNI frame would end the process instead, so the core
+     * catches, returns a negative code and leaves the reason here.
+     */
+    external fun lastError(): String?
 
     /** Diagnostics for the harness: 0 stations, 1 log rows, 2 run mode, 3 operator state, 4 block,
      *  5 last message ordinal, 6 monitor level (x1000), 7 my envelope length, 8 my send position,

@@ -109,6 +109,20 @@ class MainFormController(private val audio: ContestAudio = ContestAudio()) {
     var elapsedSeconds by mutableLongStateOf(0L)
         private set
 
+    /**
+     * The three status captions the core's game loop writes into the desktop form
+     * (`Contest.pas:839-842`, `Log.pas ShowRate`): the QSO rate (`n  qso/hr.`), the run clock
+     * (`hh:nn:ss`) and the Pile-Up caption (`Pile-Up:  n`). Read back verbatim through
+     * [MorseCore.statusText] — the rate is computed by the original `ShowRate`, not re-derived
+     * here, and the clock is the core's `BlockNumber`, not the player's sample count.
+     */
+    var rateText by mutableStateOf("")
+        private set
+    var clockText by mutableStateOf("")
+        private set
+    var pileUpText by mutableStateOf("")
+        private set
+
     /** The QSO log, one list of the seven columns per row, oldest first (ListView2 order). */
     var logRows by mutableStateOf(emptyList<List<String>>())
         private set
@@ -128,6 +142,9 @@ class MainFormController(private val audio: ContestAudio = ContestAudio()) {
 
     /** Log rows already copied out of the core; the poll only rebuilds the list when this moves. */
     private var loggedRows = 0
+
+    /** The last core failure already logged, so one exception is not repeated five times a second. */
+    private var reportedCoreError = ""
 
     fun updateRunMinutes(minutes: Int) {
         runMinutes = minutes.coerceIn(MIN_RUN_MINUTES, MAX_RUN_MINUTES)
@@ -155,6 +172,9 @@ class MainFormController(private val audio: ContestAudio = ContestAudio()) {
         running = true
         started = true
         elapsedSeconds = 0L
+        rateText = ""
+        clockText = ""
+        pileUpText = ""
         loggedRows = 0
         logRows = emptyList()
         rawPoints = 0
@@ -227,21 +247,44 @@ class MainFormController(private val audio: ContestAudio = ContestAudio()) {
         val current = handle
         if (current == 0L) return -1
         val rows = runCatching { MorseCore.saveQso(current) }.getOrDefault(-1)
-        if (rows > 0) Log.i(TAG, "QSO saved, log rows=$rows")
+        if (rows > 0) Log.i(TAG, "QSO saved, log rows=$rows") else reportCoreError()
         return rows
     }
 
     /**
-     * One main-thread poll: clock, log and score, a few times a second (they are cheap reads).
+     * The core catches its own exceptions (a Pascal one that reached this frame would end the
+     * process), reports them through [MorseCore.lastError] and returns a negative code. Log the
+     * message once per distinct failure so a bad save is diagnosable instead of silent.
+     */
+    private fun reportCoreError() {
+        val error = runCatching { MorseCore.lastError() }.getOrNull().orEmpty()
+        if (error.isNotEmpty() && error != reportedCoreError) {
+            reportedCoreError = error
+            Log.e(TAG, "core reported: $error")
+        }
+    }
+
+    /**
+     * One main-thread poll: clock, rate, pile-up, log and score, a few times a second (they are
+     * cheap reads).
      *
-     * The log is re-read only when `logCount` changes; the score only when a value moves. The
-     * clock is the audio thread's sample count divided by the rate — the same arithmetic the
-     * original used for its `Panel2` caption (`Contest.pas:832`).
+     * The log is re-read only when `logCount` changes; the score and the three captions only when
+     * a value moves. [elapsedSeconds] counts the samples the audio thread has pulled and is used
+     * for one thing only — the run-length auto-stop; the clock on screen is the core's own
+     * `Panel2` (`Tst.BlockNumber`), so the two never disagree by more than the five one-sample
+     * blocks `GetAudio` produces before it returns full blocks.
      */
     fun poll() {
         if (!running) return
         val elapsed = audio.samplesConsumed / audio.sampleRate
         if (elapsed != elapsedSeconds) elapsedSeconds = elapsed
+
+        val rate = readStatus(0)
+        val clock = readStatus(1)
+        val pileUp = readStatus(2)
+        if (rate != rateText) rateText = rate
+        if (clock != clockText) clockText = clock
+        if (pileUp != pileUpText) pileUpText = pileUp
 
         val rows = runCatching { MorseCore.logCount() }.getOrDefault(0)
         if (rows != loggedRows) {
@@ -263,6 +306,10 @@ class MainFormController(private val audio: ContestAudio = ContestAudio()) {
         if (verifiedMultipliersValue != verifiedMultipliers) verifiedMultipliers = verifiedMultipliersValue
 
         if (elapsedSeconds >= runMinutes.toLong() * 60L) stopRun()
+
+        // A failing audio block returns 0 samples (silence) rather than killing the process; this
+        // is where the reason reaches logcat.
+        reportCoreError()
     }
 
     /** The activity became visible: resume pulling blocks if a run is still live. */
@@ -281,6 +328,10 @@ class MainFormController(private val audio: ContestAudio = ContestAudio()) {
     }
 
     private fun readScore(which: Int): Int = runCatching { MorseCore.score(which) }.getOrDefault(0)
+
+    /** One of the core's three status captions; "" when the core has nothing to say. */
+    private fun readStatus(which: Int): String =
+        runCatching { MorseCore.statusText(which) }.getOrNull().orEmpty()
 
     private companion object {
         const val TAG = "MainForm"

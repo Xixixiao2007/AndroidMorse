@@ -47,6 +47,8 @@ function  mr_block_size(): Integer; cdecl;
 function  mr_log_count(): Integer; cdecl;
 function  mr_log_cell(row, col: Integer; buf: PAnsiChar; cap: Integer): Integer; cdecl;
 function  mr_score(which: Integer): Integer; cdecl;
+function  mr_status_text(which: Integer; buf: PAnsiChar; cap: Integer): Integer; cdecl;
+function  mr_last_error(buf: PAnsiChar; cap: Integer): Integer; cdecl;
 function  mr_station_count(H: Pointer): Integer; cdecl;
 
 { --- harness only (the app never calls these) --------------------------- }
@@ -75,12 +77,53 @@ the core exposes it directly and the phone's UI drives it.
 | `mr_contest_rate` / `mr_block_size` | 11025 Hz / 512 samples. |
 | `mr_log_count` / `mr_log_cell(row, col, buf, cap)` | the QSO log **as the original form rendered it**: `Log.LastQsoToScreen` formats each saved QSO per contest and appends it through `ScoreTableInsert`, so the core simply reads those rows back (0 = the row caption = UTC, 1..6 = the sub-items in the contest's own order). For CQ WPX that is `UTC, Call, RST, serial, Err, Wpm`. |
 | `mr_score(which)` | 0 raw points, 1 verified points, 2 raw multipliers, 3 verified multipliers. |
+| `mr_status_text(which, buf, cap)` | the three status captions the core's game loop writes into the desktop form, read back verbatim: 0 = the QSO rate (`n  qso/hr.`, `Log.pas:1107 ShowRate`), 1 = the run clock (`hh:nn:ss`, `Contest.pas:840`), 2 = the Pile-Up caption (`Pile-Up:  n`, `Contest.pas:842`). `-1` for an index other than 0..2. |
+| `mr_last_error(buf, cap)` | the last exception an entry point caught, as `where: ClassName: Message`, or `""`. Rule 5 below is why this exists. |
+
+### Why the rate and the clock are read, not recomputed
+
+`ShowRate` already existed and already runs on every block: it counts the QSOs in the last five
+minutes and writes `MainForm.Panel7` — the phone's panel was the only thing still showing a
+literal `0  qso/hr.`, because nothing read the caption back. The clock has the same shape, and
+reading `Panel2` is *more* correct than the Kotlin arithmetic it replaces: the core's clock is
+`Tst.BlockNumber`, while the UI's sample count also includes the five one-sample blocks
+`GetAudio` returns before it switches to full blocks (`Contest.pas:700-704`). One number, one
+owner: the core keeps the run clock, the UI keeps the playback bookkeeping it needs for its
+run-length auto-stop (`MainFormController.elapsedSeconds`), and the display shows the core's text.
+
+Verified vs raw is the same seam, seen over time rather than as a second number: a QSO scores
+*raw* when it is saved and only becomes *verified* when the DX station finishes the QSO and the
+core copies its true data (`Contest.pas:800-815`). So the two columns differ between the save and
+the confirmation — `verified = 0` while `raw = 1` — and catch up afterwards. A dupe never
+verifies (`Log.UpdateStats` counts only error-free QSOs).
+
+Starting a run resets the three captions along with the log and the score
+(`headless/Session.pas StartRun`), because the game loop only rewrites them from the first full
+block on: without the reset, Stop -> Run would show the previous run's rate and clock.
 
 Evidence (2026-10-20, ZTE 7534N, CQ WPX):
 
 - probe: `cqPeak=19350 calls=1 stations=1 call=P29SX exch=599/1 saved=1 log=1 pts=1 mult=1`
 - app: `ContestAudio: peak=19350` while the CQ plays, `MainForm: QSO saved, log rows=1`,
   log row `00:00:22 | P29SX | 599 | 1 | NIL | 25`, score table `Pts 1 / Mult 1 / Score 1`.
+
+### Rule 5, measured: a Pascal exception here ends the process
+
+"Nothing throws across the boundary" is not a style rule. A Pascal exception raised while the
+core is called from a JNI frame cannot be caught in Kotlin, and on the ZTE 7534N it did not even
+reach a handler: the process ended with `exited cleanly (255)`, no tombstone, no logcat line. So
+every entry point that mutates state (`mr_block`, `mr_send`, `mr_set_entry`, `mr_save_qso`,
+`mr_run_start`) now catches, records into `mr_last_error` and returns a negative code (`-3` from
+`mr_save_qso`). A failed audio block returns 0 samples — silence for one block — instead of
+killing the run. `mrcore.lpr` also installs FPC's `ErrorProc`/`ExceptProc` hooks, which append
+`RunError n` / `Unhandled Class: Message` to `mr-trace.log` in the data dir: a runtime error that
+bypasses `try..except` is otherwise invisible on the phone.
+
+Reads that hand back **engine-owned strings** (`mr_status_text`, `mr_log_cell`) take the engine
+lock. The game loop reassigns those captions and appends those rows on the audio thread, and a
+Pascal string is refcounted: an unlocked read hands the caller a reference the writer is about to
+free. Measured before the lock: a native `SIGSEGV` in `fpc_popaddrstack` on the audio thread,
+36 s into an idle run.
 
 ### Harness-only functions
 

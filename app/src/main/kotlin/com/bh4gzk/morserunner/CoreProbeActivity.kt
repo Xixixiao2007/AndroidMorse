@@ -200,9 +200,13 @@ private fun audioProof(): String = runCatching {
         }
 
         val dbg = (0..9).joinToString("/") { MorseCore.debugState(h, it).toString() }
+        // The three captions the game loop writes (rate / clock / pile-up), read back the way the
+        // form reads them. Before this call existed the rate panel showed a literal 0.
+        val status = (0..2).joinToString(" ") { "\"${MorseCore.statusText(it) ?: "-"}\"" }
         "cqPeak=$cqPeak cqSamples=$cqSamples calls=$calls cqBlocks=$cqBlocks stations=$stations " +
             "call=${call ?: "-"} exch=${e1 ?: "-"}/${e2 ?: "-"} saved=$saved log=${MorseCore.logCount()} " +
-            "pts=${MorseCore.score(0)} mult=${MorseCore.score(2)} rate=${MorseCore.rate()} block=$n dbg=$dbg"
+            "pts=${MorseCore.score(0)} vpts=${MorseCore.score(1)} mult=${MorseCore.score(2)} " +
+            "status=$status rate=${MorseCore.rate()} block=$n dbg=$dbg"
     } finally {
         MorseCore.contestFree(h)
     }

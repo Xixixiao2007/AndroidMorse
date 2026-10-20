@@ -68,7 +68,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bh4gzk.morserunner.MainFormController
 import com.bh4gzk.morserunner.MorseCore
-import java.util.Locale
 import kotlin.math.min
 
 /*
@@ -108,26 +107,23 @@ import kotlin.math.min
  * bands side by side: the client area (517 wide), the right column `Panel9`
  * (212 wide) and, below both, `Panel1` (729 wide).  729 px at 0.80 is 583 dp —
  * wider than the phone.  Side by side is therefore impossible without a second,
- * smaller scale, so the three bands are **stacked vertically** in the order a
- * user reads them (client area -> right column -> bottom panel), and each band
- * is wrapped onto as few phone-width rows as its own geometry allows:
+ * smaller scale, so the three bands are **stacked vertically**, and each band is
+ * wrapped onto as few phone-width rows as its own geometry allows:
  *
+ *   - The client area is **one slot**: the design-time logo block (`Shape1` +
+ *     `Label12..22`) while idle, the QSO log (`ListView2`) once a run starts.
+ *     The original overlays both (they are `alClient`; `Main.pas:436`), and this
+ *     port does not render `RichEdit1` at all — it is the received-CW pane, and
+ *     Morse Runner is copy-by-ear.
+ *   - `Panel1` comes **before** the settings: the entry row (`Edit1..3`), the
+ *     F1-F8 buttons and the score grid (`Panel11`, with the `Panel4`/`Panel7`/
+ *     `Panel2` status row and the `PaintBox1` histogram) are the controls a
+ *     running operator touches, and the IME covers the bottom of the screen —
+ *     so they sit above `Panel9` instead of below it.
  *   - `Panel9`'s four group boxes are 194-195 px wide each (156 dp at 0.80):
  *     `Contest` + `Run` share one row, `Station` + `Band Conditions` the next.
- *     Their internal absolute offsets are untouched.
- *   - `Panel1`'s left third (`Edit1..3`, the F1-F8 speed buttons), its middle
- *     (`Panel4` mode caption, `Panel7`, `Panel2` clock, `PaintBox1` histogram,
- *     `Panel8` RIT) and its right third (`Panel11` score grid) become three
- *     stacked rows; the F-key buttons and the three entry fields stretch to the
- *     phone width (they are `alNone` in the .dfm, but a 12 dp-wide `Nr.` box
- *     would be unusable, so their *proportions* are kept and only the
- *     horizontal extent grows).
- *   - The design-time logo block (`Shape1` + `Label12..22`, the idle screen)
- *     and the run-time CW pane (`RichEdit1`) both cover the same client area in
- *     the original (every one of them is `alClient`; `Main.pas:436` switches
- *     the pane to `alClient`).  They are stacked here — logo first, then the
- *     pane — because the phone has the vertical room and an overlay would hide
- *     the logo entirely.
+ *     They are the band a run is set up in, so they sit at the bottom where the
+ *     keyboard may cover them.
  *
  * All absolute child positions inside the groups are the .dfm's, scaled; only
  * the band stacking and the stretched/alClient rows depart from it.  The
@@ -137,20 +133,19 @@ import kotlin.math.min
  *
  * The form is bound to the Pascal contest core through [MainFormController].  The
  * Run button starts `MorseCore.runStart` and the audio thread (`ContestAudio`);
- * that thread's `MorseCore.block` calls *are* the game loop, so the clock is
- * simply "samples pulled / rate", and the QSO log and score are polled back from
- * the core a few times a second.  F1..F8 send the `TStationMessage` ordinals, the
- * Station `Call` field is the operator call, and the Exchange `Call` field is
- * pushed with `MorseCore.setHisCall` on every change.  The activity copies
- * `assets/data` into `filesDir` and calls `MorseCore.setDataDir` before the first
- * run, because the core reads DXCC.LIST and the call histories by name from there.
+ * that thread's `MorseCore.block` calls *are* the game loop, and the QSO log,
+ * score, rate, clock and pile-up count are polled back from the core a few
+ * times a second — the clock and the rate are the core's own panel captions
+ * (`mr_status_text`), not a second, Kotlin-side computation of the same numbers.
+ * F1..F8 send the `TStationMessage` ordinals, the Station `Call` field is the
+ * operator call, and the Exchange `Call` field is pushed with
+ * `MorseCore.setHisCall` on every change.  The activity copies `assets/data`
+ * into `filesDir` and calls `MorseCore.setDataDir` before the first run, because
+ * the core reads DXCC.LIST and the call histories by name from there.
  *
- * Still deliberately static: the CW pane (the operator copies by ear — Morse
- * Runner has no decoded-text pane) and the rate histogram (its data lives in the
- * desktop form's `Histo` object, which the ABI does not expose).  Once a run has
- * started the log uses the original's run-time `alClient` geometry (513x238,
- * Main.pas:2111) instead of the idle 54 px, because that is how the original
- * showed it while running.
+ * Still deliberately static: the rate histogram (its data lives in the desktop
+ * form's `Histo` object, which the ABI does not expose).  The QSO log uses the
+ * original's run-time `alClient` geometry (513x238, Main.pas:2111).
  */
 
 /**
@@ -261,17 +256,72 @@ fun MainFormScreen(controller: MainFormController, modifier: Modifier = Modifier
                     )
                     Spacer(Modifier.height(4.dp))
 
-                    QsoLogListView(rows = controller.logRows, runLayout = controller.started)
+                    // ONE slot for the client area: the copyright/logo block while idle, the QSO
+                    // log once a run starts. In the original the logo (Shape1 + Label12..22) and
+                    // RichEdit1 both cover that area `alClient` (Main.pas:436) and ListView2 is the
+                    // third tenant, so stacking all three put three tall boxes on a portrait
+                    // screen where at most one has content.
+                    if (controller.started) {
+                        QsoLogListView(rows = controller.logRows)
+                    } else {
+                        LogoBlock()
+                    }
 
-                    // Main.dfm:545 ListView2 is alTop directly against the logo block;
-                    // Main.dfm:371 Panel5 (0,361,729x10) is an empty spacer band.
-                    Spacer(Modifier.height(5f.px))
-
-                    LogoBlock()
-
-                    // Main.dfm:526 RichEdit1 (alBottom in design, alClient at runtime).
                     Spacer(Modifier.height(4.dp))
-                    CwPane()
+
+                    // The entry row, the F-keys and the score go ABOVE the settings band: the IME
+                    // covers the bottom of the screen while the operator types, and these are the
+                    // controls that must stay visible (contest/station settings may sit under it).
+                    //
+                    // Panel1, left third: Main.dfm:178-233 Edit1..3 and their labels.
+                    ExchangeRow(
+                        hisCall = hisCall,
+                        exch1 = exch1,
+                        exch2 = exch2,
+                        onHisCallChange = { hisCall = it },
+                        onExch1Change = { exch1 = it },
+                        onExch2Change = { exch2 = it },
+                        // The phone has no Enter key on the form: the keyboard's Done action on the
+                        // last field is the same gesture (Main.pas FormKeyPress #13 / ProcessEnter).
+                        onEnter = {
+                            val rows = controller.saveQso()
+                            if (rows > 0) {
+                                hisCall = ""
+                                exch1 = ""
+                                exch2 = ""
+                                controller.setEntry("", "", "")
+                            }
+                        },
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    // Panel1, F1-F8: Main.dfm:86-157 SpeedButton4..11.
+                    SendButtons(onSend = controller::send)
+
+                    Spacer(Modifier.height(4.dp))
+
+                    // Panel1, middle + clock: Main.dfm:270 Panel4, :285 Panel7, :234 Panel2.
+                    // The rate, the clock and the pile-up count are the core's own captions.
+                    ModeAndClockRow(
+                        started = controller.started,
+                        rate = controller.rateText,
+                        clock = controller.clockText,
+                        pileUp = controller.pileUpText,
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    // Panel1, bottom right: Main.dfm:251 Panel3 (PaintBox1), :293 Panel8,
+                    // :315 Panel11 (ListView1 score grid).
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column {
+                            RateHistogramPanel()
+                            Spacer(Modifier.height(2.dp))
+                            RitBar()
+                        }
+                        ScoreGrid(controller)
+                    }
 
                     Spacer(Modifier.height(6.dp))
 
@@ -307,52 +357,6 @@ fun MainFormScreen(controller: MainFormController, modifier: Modifier = Modifier
                         )
                         BandConditionsGroup()
                     }
-
-                    Spacer(Modifier.height(6.dp))
-
-                    // Panel1, left third: Main.dfm:178-233 Edit1..3 and their labels.
-                    ExchangeRow(
-                        hisCall = hisCall,
-                        exch1 = exch1,
-                        exch2 = exch2,
-                        onHisCallChange = { hisCall = it },
-                        onExch1Change = { exch1 = it },
-                        onExch2Change = { exch2 = it },
-                        // The phone has no Enter key on the form: the keyboard's Done action on the
-                        // last field is the same gesture (Main.pas FormKeyPress #13 / ProcessEnter).
-                        onEnter = {
-                            val rows = controller.saveQso()
-                            if (rows > 0) {
-                                hisCall = ""
-                                exch1 = ""
-                                exch2 = ""
-                                controller.setEntry("", "", "")
-                            }
-                        },
-                    )
-
-                    Spacer(Modifier.height(4.dp))
-
-                    // Panel1, F1-F8: Main.dfm:86-157 SpeedButton4..11.
-                    SendButtons(onSend = controller::send)
-
-                    Spacer(Modifier.height(4.dp))
-
-                    // Panel1, middle + clock: Main.dfm:270 Panel4, :285 Panel7, :234 Panel2.
-                    ModeAndClockRow(elapsedSeconds = controller.elapsedSeconds)
-
-                    Spacer(Modifier.height(4.dp))
-
-                    // Panel1, bottom right: Main.dfm:251 Panel3 (PaintBox1), :293 Panel8,
-                    // :315 Panel11 (ListView1 score grid).
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Column {
-                            RateHistogramPanel()
-                            Spacer(Modifier.height(2.dp))
-                            RitBar()
-                        }
-                        ScoreGrid(controller)
-                    }
                     Spacer(Modifier.height(8.dp))
                 }
             }
@@ -362,10 +366,9 @@ fun MainFormScreen(controller: MainFormController, modifier: Modifier = Modifier
 
 // ---------------------------------------------------------------------------
 // Main.dfm:545 ListView2 — the QSO log (UTC/Call/Recv/Sent/Pref/Chk/Wpm).
-// 54 px tall (header + 2 rows) in the idle design; alClient (513 x 238) once a
-// run starts, which is the geometry the original ran with (Main.pas:2111).
+// Only shown once a run has started, at the original's run-time alClient
+// geometry (513 x 238, Main.pas:2111): while idle the same slot holds the logo.
 // ---------------------------------------------------------------------------
-private const val LOG_IDLE_HEIGHT_PX = 54f
 private const val LOG_RUN_HEIGHT_PX = 238f
 private const val LOG_ROW_HEIGHT_PX = 16f
 
@@ -373,7 +376,7 @@ private const val LOG_ROW_HEIGHT_PX = 16f
 private const val LOG_RUN_ROWS = 13
 
 @Composable
-private fun QsoLogListView(rows: List<List<String>>, runLayout: Boolean) {
+private fun QsoLogListView(rows: List<List<String>>) {
     // Column widths exactly as declared (80/104/90/84/(rest)/40/40 of 513 px).
     val columns = listOf(
         "UTC" to 80f,
@@ -385,11 +388,10 @@ private fun QsoLogListView(rows: List<List<String>>, runLayout: Boolean) {
         "Wpm" to 40f,
     )
     val total = columns.sumOf { it.second.toDouble() }.toFloat()
-    val heightPx = if (runLayout) LOG_RUN_HEIGHT_PX else LOG_IDLE_HEIGHT_PX
     Column(
         Modifier
             .fillMaxWidth()
-            .height(heightPx.px)
+            .height(LOG_RUN_HEIGHT_PX.px)
             .background(FieldFace)
             .border(1.dp, GroupEdge),
     ) {
@@ -411,8 +413,7 @@ private fun QsoLogListView(rows: List<List<String>>, runLayout: Boolean) {
         Column(Modifier.fillMaxWidth().weight(1f).background(FieldFace)) {
             // Newest at the bottom, the way the original's ListView2 auto-scrolled
             // to the last QSO: show the tail of the log that fits the height.
-            val visible = if (runLayout) LOG_RUN_ROWS else 0
-            rows.takeLast(visible).forEach { cells ->
+            rows.takeLast(LOG_RUN_ROWS).forEach { cells ->
                 Row(Modifier.fillMaxWidth().height(LOG_ROW_HEIGHT_PX.px)) {
                     columns.forEachIndexed { index, (_, width) ->
                         Box(
@@ -438,8 +439,8 @@ private fun QsoLogListView(rows: List<List<String>>, runLayout: Boolean) {
 
 // ---------------------------------------------------------------------------
 // Main.dfm:389 Shape1 + :400-525 Label12..22 — the idle screen's logo block.
-// Shape1 is alClient (513 x 238 design px) and is what the CW pane covers at
-// run time; here the two are stacked instead of overlaid.
+// Shape1 is alClient (513 x 238 design px), the same slot the run-time QSO log
+// takes over: the form shows one or the other, never both (see MainFormScreen).
 // ---------------------------------------------------------------------------
 @Composable
 private fun LogoBlock() {
@@ -528,27 +529,6 @@ private fun LogoBlock() {
             family = FontFamily.Monospace,
             modifier = Modifier.align(Alignment.TopCenter).offset(y = 214f.px),
         )
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Main.dfm:526 RichEdit1 — the simulated CW stream (TRichEdit, Consolas -13).
-// 41 px in the design, alClient at run time (Main.pas:436); 92 dp here so that
-// four lines of the stream are readable.
-// ---------------------------------------------------------------------------
-@Composable
-private fun CwPane() {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(92.dp)
-            .background(FieldFace)
-            .border(1.dp, FieldEdge)
-            .padding(horizontal = 4f.px, vertical = 3f.px),
-    ) {
-        // Kept empty on purpose: Morse Runner makes the operator copy by ear.  The
-        // .lst stream the original loaded here (Main.pas:2263) is the received
-        // text, and this port does not decode — nothing may appear in this pane.
     }
 }
 
@@ -853,16 +833,23 @@ private fun SendButtons(onSend: (Int) -> Unit) {
 // ---------------------------------------------------------------------------
 // Main.dfm:270 Panel4 (292,6,114x33) — the run-mode caption, red for
 // COMPETITION (Main.pas:2091-2092), green otherwise; :285 Panel7 (412,6,104x33)
-// an empty bevel panel; :234 Panel2 (522,5,191x33) the clock.
+// the QSO rate; :234 Panel2 (522,5,191x33) the clock.
+//
+// All three are read back from the core, which writes them from the game loop
+// itself: Panel7 = Log.pas:1107 ShowRate ('n  qso/hr.'), Panel2 = Contest.pas:840
+// FormatDateTime('hh:nn:ss', BlocksToSeconds(Tst.BlockNumber)), Panel4 =
+// Contest.pas:842 'Pile-Up:  n'.  Before a run the form shows its design-time
+// captions (.dfm: Panel7 empty, Panel2 '00:00:00', Panel4 the mode name).
 // ---------------------------------------------------------------------------
 @Composable
-private fun ModeAndClockRow(elapsedSeconds: Long) {
+private fun ModeAndClockRow(started: Boolean, rate: String, clock: String, pileUp: String) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Main.pas:1944 Mode array: 'Pile-Up' is the default (rmPileUp).
+        // Main.pas:1944 Mode array: 'Pile-Up' is the default (rmPileUp); at run time the same
+        // panel carries the caller count, which is the DxCount the original formatted in.
         Box(
             Modifier
                 .size(114f.px, 33f.px)
@@ -870,11 +857,13 @@ private fun ModeAndClockRow(elapsedSeconds: Long) {
                 .vclBevel(raised = false),
             contentAlignment = Alignment.Center,
         ) {
-            FormLabel("Pile-Up", sizePx = 11f, color = ModeGreen, weight = FontWeight.Bold)
+            FormLabel(
+                if (started && pileUp.isNotEmpty()) pileUp else "Pile-Up",
+                sizePx = 11f,
+                color = ModeGreen,
+                weight = FontWeight.Bold,
+            )
         }
-        // Main.dfm:285 Panel7 is empty at design time; at run time Log.pas:1114
-        // sets its Caption to 'n  qso/hr.'.  The rate lives in the desktop form's
-        // Histo object, which the ABI does not expose, so the idle 0 stays.
         Box(
             Modifier
                 .size(104f.px, 33f.px)
@@ -882,7 +871,7 @@ private fun ModeAndClockRow(elapsedSeconds: Long) {
                 .vclBevel(raised = false),
             contentAlignment = Alignment.Center,
         ) {
-            FormLabel("0  qso/hr.", sizePx = 12f)
+            FormLabel(if (started) rate else "", sizePx = 12f)
         }
         Spacer(Modifier.weight(1f))
         Box(
@@ -893,19 +882,13 @@ private fun ModeAndClockRow(elapsedSeconds: Long) {
             contentAlignment = Alignment.Center,
         ) {
             // Main.dfm:740 Panel2.Caption '00:00:00', Arial -24, colour #20F0D7.
-            // Contest.pas:832 keeps it at FormatDateTime('hh:nn:ss', BlocksToSeconds).
-            FormLabel(clockText(elapsedSeconds), sizePx = 24f, color = TimerFont)
+            FormLabel(
+                if (started && clock.isNotEmpty()) clock else "00:00:00",
+                sizePx = 24f,
+                color = TimerFont,
+            )
         }
     }
-}
-
-/** `FormatDateTime('hh:nn:ss')` of the run clock; the hour wraps at 24 as it does there. */
-private fun clockText(seconds: Long): String {
-    val total = if (seconds > 0L) seconds else 0L
-    val hours = (total / 3600L) % 24L
-    val minutes = (total / 60L) % 60L
-    val secs = total % 60L
-    return String.format(Locale.ROOT, "%02d:%02d:%02d", hours, minutes, secs)
 }
 
 // ---------------------------------------------------------------------------
