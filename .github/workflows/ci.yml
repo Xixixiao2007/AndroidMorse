@@ -46,8 +46,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Not android-actions/setup-android@v3: on the current ubuntu-latest image
+      # it decides the preinstalled sdkmanager is "wrong version", downloads
+      # another one and then runs `sdkmanager --licenses` without answers, which
+      # exits 1 on the interactive prompt.  The image already ships the SDK, so
+      # use it and accept the licences non-interactively.
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          SM="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SM" --licenses > /dev/null 2>&1 || true
+          "$SM" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       # The project has no Gradle wrapper (this machine builds with a local 8.9
       # install), so install the same version here.
