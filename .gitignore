@@ -17,3 +17,7 @@ captures/
 .cxx/
 *.apk
 *.aab
+
+# Vendored toolchain: the Gradle distribution lives on disk, not in history.
+# 274 MB of jars in git is why the first push could not complete.
+/tools/

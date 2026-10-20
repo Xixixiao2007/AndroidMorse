@@ -491,7 +491,7 @@ private fun LogoBlock() {
         // block is narrower than the .dfm's 513 px; the vertical offsets are
         // the .dfm's (label y minus Shape1 y = 54).
         FormLabel(
-            "Morse Runner 1.xx",
+            "Morse Runner 1.85.4",
             sizePx = 35f,
             color = TitleShadow,
             weight = FontWeight.Bold,
@@ -501,7 +501,7 @@ private fun LogoBlock() {
                 .offset(x = 6f.px, y = 7f.px),
         )
         FormLabel(
-            "Morse Runner 1.xx",
+            "Morse Runner 1.85.4",
             sizePx = 35f,
             color = TitleAqua,
             weight = FontWeight.Bold,
@@ -511,7 +511,7 @@ private fun LogoBlock() {
                 .offset(x = 1f.px, y = 3f.px),
         )
         FormLabel(
-            "Morse Runner 1.xx",
+            "Morse Runner 1.85.4",
             sizePx = 35f,
             color = TitleGreen,
             weight = FontWeight.Bold,
