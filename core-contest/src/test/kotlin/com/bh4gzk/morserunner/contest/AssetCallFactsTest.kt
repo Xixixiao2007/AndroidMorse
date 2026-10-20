@@ -145,8 +145,10 @@ class AssetCallFactsTest {
 class RealAssetCallFactsTest {
 
     private val upstream: File? = generateSequence(File("").absoluteFile) { it.parentFile }
-        .map { File(it, "upstream/MorseRunnerCE") }
-        .firstOrNull { it.isDirectory }
+        .flatMap { root ->
+            sequenceOf(File(root, "upstream/MorseRunnerCE"), File(root, "app/src/main/assets/data"))
+        }
+        .firstOrNull { it.isDirectory && it.listFiles().orEmpty().isNotEmpty() }
 
     private fun facts(): CallFacts {
         val root = upstream
