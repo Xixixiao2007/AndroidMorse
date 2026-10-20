@@ -199,13 +199,24 @@ private fun audioProof(): String = runCatching {
             pull(80)   // let the answer and TU go out
         }
 
+        // 4. Keep the loop running and watch the verified score. The DX confirms a few seconds
+        //    after the save; this is the window that used to kill the process. Count real blocks
+        //    (the ring is empty when the engine has not advanced) so the wait is engine time.
+        var waitedBlocks = 0
+        while (waitedBlocks < 600 && MorseCore.score(1) == 0) {
+            val got = MorseCore.block(h, buf)
+            if (got > 0) waitedBlocks++ else Thread.sleep(2)
+        }
+        val vptsEnd = MorseCore.score(1)
+
         val dbg = (0..9).joinToString("/") { MorseCore.debugState(h, it).toString() }
         // The three captions the game loop writes (rate / clock / pile-up), read back the way the
         // form reads them. Before this call existed the rate panel showed a literal 0.
         val status = (0..2).joinToString(" ") { "\"${MorseCore.statusText(it) ?: "-"}\"" }
         "cqPeak=$cqPeak cqSamples=$cqSamples calls=$calls cqBlocks=$cqBlocks stations=$stations " +
             "call=${call ?: "-"} exch=${e1 ?: "-"}/${e2 ?: "-"} saved=$saved log=${MorseCore.logCount()} " +
-            "pts=${MorseCore.score(0)} vpts=${MorseCore.score(1)} mult=${MorseCore.score(2)} " +
+            "pts=${MorseCore.score(0)} vpts=${MorseCore.score(1)} vptsEnd=$vptsEnd waited=$waitedBlocks " +
+            "mult=${MorseCore.score(2)} " +
             "status=$status rate=${MorseCore.rate()} block=$n dbg=$dbg"
     } finally {
         MorseCore.contestFree(h)
