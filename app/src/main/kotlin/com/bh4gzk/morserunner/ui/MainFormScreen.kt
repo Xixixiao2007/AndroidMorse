@@ -300,7 +300,9 @@ private fun QsoLogListView() {
                         .border(0.5.dp, GroupEdge),
                     contentAlignment = Alignment.CenterStart,
                 ) {
-                    FormLabel(name, sizePx = 15f, modifier = Modifier.padding(start = 3f.px))
+                    // .dfm font is -15 px; 13 px here so the 40 px-wide Chk/Wpm
+                    // columns still fit their captions at 344 dp of log width.
+                    FormLabel(name, sizePx = 13f, modifier = Modifier.padding(start = 3f.px))
                 }
             }
         }
@@ -385,14 +387,17 @@ private fun LogoBlock() {
             family = FontFamily.Monospace,
             modifier = Modifier.align(Alignment.TopCenter).offset(y = 137f.px),
         )
-        // Main.dfm:470 Label19 CE copyright (28,234) -> y 180.
+        // Main.dfm:470 Label19 CE copyright (28,234) -> y 180.  66 characters do
+        // not fit one 344 dp line at 10.4 sp, so this line wraps to two
+        // (180..210 design px) and the GitHub URL moves from y 201 to y 214.
         FormLabel(
             "Copyright \u00A92022-2026 Morse Runner Community Edition Contributors",
             sizePx = 13f,
             family = FontFamily.Monospace,
+            textAlign = TextAlign.Center,
             modifier = Modifier.align(Alignment.TopCenter).offset(y = 180f.px),
         )
-        // Main.dfm:512 Label22 URL (126,255) -> y 201.
+        // Main.dfm:512 Label22 URL (126,255) -> y 201, shifted to 214 for the wrap above.
         FormLabel(
             "https://www.github.com/w7sst/MorseRunner",
             sizePx = 13f,
