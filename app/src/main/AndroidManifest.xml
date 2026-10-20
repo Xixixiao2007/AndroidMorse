@@ -6,8 +6,11 @@
         android:label="Morse Runner"
         android:supportsRtl="true"
         android:theme="@style/Theme.MorseRunner">
+        <!-- Layout milestone: the launcher shows the reproduction of Main.dfm.
+             The status-bar/insets handling lives in the Compose screen, so the
+             activity is allowed to be edge-to-edge on API 35+. -->
         <activity
-            android:name=".MainActivity"
+            android:name=".MainFormActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
@@ -15,6 +18,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-    </application>
+        <!-- The previous session screen (T9–T18).  No longer the launcher, but
+             kept launchable by name for the ticket that wires the form to the
+             session controller: adb shell am start -n
+             com.bh4gzk.morserunner/.MainActivity -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+            <activity
+            android:name=".CoreProbeActivity"
+            android:exported="true" />
+</application>
 
 </manifest>
