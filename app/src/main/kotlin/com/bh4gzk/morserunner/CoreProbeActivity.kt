@@ -231,6 +231,41 @@ private fun audioProof(): String = runCatching {
         }
         val vptsEnd = MorseCore.score(1)
 
+        // 4b. A SECOND QSO. The pile-up is supposed to put a different caller on the air, so a
+        //     second save must log a different call and must not be flagged DUP. Before the
+        //     callsign pool loaded, every caller was the same fallback call and rows 2..n were
+        //     dupes of row 1; this is the regression check for that.
+        var call2: String? = null
+        var saved2 = -1
+        var calls2 = 0
+        var sameCall = false
+        while (MorseCore.stationCount(h) == 0 && calls2 < 8) {
+            MorseCore.send(h, 1)
+            calls2++
+            pull(40)
+            waitDone()
+            pull(20)
+        }
+        val heard2 = if (MorseCore.stationCount(h) > 0) MorseCore.stationCall(h, 0) else null
+        if (heard2 != null) {
+            call2 = heard2
+            val e12 = MorseCore.stationExch(h, 0, 0)
+            val e22 = MorseCore.stationExch(h, 0, 1)
+            MorseCore.setEntry(h, heard2, e12 ?: "", e22 ?: "")
+            saved2 = MorseCore.saveQso(h)
+            pull(80)
+        }
+        sameCall = call2 != null && call2 == call
+        val rows = MorseCore.logCount()
+        // scWpx log columns: 0 time, 1 call, 2 rst, 3 nr, 4 Err, 5 wpm.
+        val row2Call = if (rows > 1) MorseCore.logCell(1, 1) else null
+        val row2Err = if (rows > 1) MorseCore.logCell(1, 4) else null
+        var waited2 = 0
+        while (waited2 < 600 && MorseCore.score(1) < 2) {
+            val got = MorseCore.block(h, buf)
+            if (got > 0) waited2++ else Thread.sleep(2)
+        }
+
         // 5. Envelope of what the core actually produces, one RMS value per block (~46 ms). A
         //    once-a-second dropout shows up here as a periodic hole in the series; it cannot be
         //    blamed on the device or the ring when the numbers are flat.
@@ -257,6 +292,9 @@ private fun audioProof(): String = runCatching {
             "call=${call ?: "-"} exch=${e1 ?: "-"}/${e2 ?: "-"} saved=$saved log=${MorseCore.logCount()} " +
             "pts=${MorseCore.score(0)} vpts=${MorseCore.score(1)} vptsEnd=$vptsEnd waited=$waitedBlocks " +
             "mult=${MorseCore.score(2)} rms=$rms " +
+            "call2=${call2 ?: "-"} sameCall=$sameCall saved2=$saved2 rows=$rows " +
+            "row2Call=${row2Call ?: "-"} row2Err=[${row2Err ?: "-"}] vpts2=${MorseCore.score(1)} " +
+            "waited2=$waited2 calls2=$calls2 " +
             "status=$status rate=${MorseCore.rate()} block=$n dbg=$dbg"
     } finally {
         MorseCore.contestFree(h)
