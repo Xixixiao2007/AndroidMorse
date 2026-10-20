@@ -25,8 +25,10 @@ class RealCallHistoryTest {
 
     /** Gradle runs tests with the module directory as cwd, so walk up to the repo root. */
     private val upstream: File? = generateSequence(File("").absoluteFile) { it.parentFile }
-        .map { File(it, "upstream/MorseRunnerCE") }
-        .firstOrNull { it.isDirectory }
+        .flatMap { root ->
+            sequenceOf(File(root, "upstream/MorseRunnerCE"), File(root, "app/src/main/assets/data"))
+        }
+        .firstOrNull { it.isDirectory && it.listFiles().orEmpty().isNotEmpty() }
 
     /** Android assets are case-sensitive; this machine may not be, so resolve the name ignoring case. */
     private fun asset(name: String): File? {
