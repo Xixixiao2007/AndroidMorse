@@ -337,12 +337,15 @@ fun MainFormScreen(controller: MainFormController, modifier: Modifier = Modifier
                             controller = controller,
                             // A new run starts from blank entry fields (WipeBoxes, Main.pas:1817).
                             onToggleRun = {
-                                if (controller.running) {
-                                    controller.stopRun()
-                                } else {
-                                    hisCall = ""
-                                    controller.startRun(contestIndex, myCall)
-                                }
+                                // The boxes are wiped on the way into a run and on the way out
+                                // (Main.pas WipeBoxes); leaving a stale call behind made the next
+                                // run look like it had already been worked.
+                                hisCall = ""
+                                exch1 = ""
+                                exch2 = ""
+                                controller.setEntry("", "", "")
+                                if (controller.running) controller.stopRun()
+                                else controller.startRun(contestIndex, myCall)
                             },
                         )
                     }
@@ -643,12 +646,14 @@ private fun StationGroup(
             fontPx = 13f,
             onValueChange = { onMyCallChange(it.uppercase()) },
         )
+        // Only the callsign is settable from this panel: everything else is the original's
+        // default and stays locked, so a run cannot be changed mid-contest by a stray tap.
         VclCheckBox(
             "QSK",
             xPx = 140f,
             yPx = 17f,
             checked = qsk,
-            onToggle = { qsk = !qsk },
+            onToggle = {},
         )
         FormLabel("CW Speed", modifier = Modifier.offset(x = 12f.px, y = 46f.px))
         VclSpinEdit(value = "25", widthPx = 65f, xPx = 91f, yPx = 43f)
@@ -666,6 +671,7 @@ private fun StationGroup(
             widthPx = 65f,
             xPx = 92f,
             yPx = 73f,
+            enabled = false,
         )
         FormLabel("RX Bandwidth", modifier = Modifier.offset(x = 12f.px, y = 106f.px))
         // Main.dfm:831 ComboBox2, items 100..600 Hz.
@@ -679,12 +685,13 @@ private fun StationGroup(
             widthPx = 65f,
             xPx = 92f,
             yPx = 102f,
+            enabled = false,
         )
         FormLabel("Mon. Level", modifier = Modifier.offset(x = 12f.px, y = 134f.px))
         // Main.dfm:742 VolumeSlider1 (92,129,60x20), Value = 0.75, Db = -15.
         VclVolumeSlider(
             value = monitorLevel,
-            onValueChange = onMonitorLevelChange,
+            onValueChange = { },
             modifier = Modifier
                 .offset(x = 92f.px, y = 129f.px)
                 .size(60f.px, 20f.px),
@@ -1308,6 +1315,7 @@ private fun VclCombo(
     widthPx: Float,
     xPx: Float,
     yPx: Float,
+    enabled: Boolean = true,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(
@@ -1321,7 +1329,7 @@ private fun VclCombo(
                 .fillMaxSize()
                 .background(FieldFace)
                 .border(1.dp, FieldEdge)
-                .clickable { expanded = true },
+                .clickable(enabled = enabled) { expanded = true },
         ) {
             FormLabel(
                 items.getOrElse(selectedIndex) { "" },
@@ -1337,7 +1345,7 @@ private fun VclCombo(
                     Path().apply {
                         moveTo(0f, 0f); lineTo(size.width, 0f); lineTo(size.width / 2f, size.height); close()
                     },
-                    FormInk,
+                    if (enabled) FormInk else FormInk.copy(alpha = 0.35f),
                 )
             }
         }
