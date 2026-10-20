@@ -84,12 +84,21 @@ class ContestAudio {
             // instead of leaving "is there any audio" to the ear of whoever is debugging.
             var peak = 0f
             var sinceLog = 0
+            var starved = 0   // blocks the core had nothing for; a stream of them = choppy audio
             while (running && generation.get() == mine && !Thread.currentThread().isInterrupted) {
                 // The only call site of MorseCore.block in the app — see the class comment.
                 val count = runCatching { MorseCore.block(handle, raw) }.getOrDefault(0)
                 if (count <= 0) {
-                    // The core only returns 0 for an invalid handle; don't spin if that happens.
-                    pause(5L)
+                    // Nothing was ready (or the handle is gone). Never leave the device without
+                    // data: write one block of silence — writeAll blocks while the device buffer
+                    // is full, which paces this loop — and count the event.
+                    starved++
+                    java.util.Arrays.fill(out, 0f)
+                    if (device != null) {
+                        writeAll(device, out, blockFrames, mine)
+                    } else {
+                        pause(blockFrames * 1_000L / sampleRate)
+                    }
                     continue
                 }
                 for (i in 0 until count) {
@@ -99,9 +108,10 @@ class ContestAudio {
                 }
                 sinceLog += count
                 if (sinceLog >= sampleRate) {
-                    Log.d(TAG, "peak=${peak.toInt()} block=${count} samples=${samples.get()}")
+                    Log.d(TAG, "peak=${peak.toInt()} block=${count} samples=${samples.get()} starved=$starved")
                     peak = 0f
                     sinceLog = 0
+                    starved = 0
                 }
                 if (device != null) {
                     writeAll(device, out, count, mine)

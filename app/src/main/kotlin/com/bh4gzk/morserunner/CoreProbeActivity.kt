@@ -209,6 +209,23 @@ private fun audioProof(): String = runCatching {
         }
         val vptsEnd = MorseCore.score(1)
 
+        // 5. Envelope of what the core actually produces, one RMS value per block (~46 ms). A
+        //    once-a-second dropout shows up here as a periodic hole in the series; it cannot be
+        //    blamed on the device or the ring when the numbers are flat.
+        val rms = StringBuilder()
+        repeat(660) {
+            val got = MorseCore.block(h, buf)
+            if (got > 0) {
+                var acc = 0.0
+                for (i in 0 until got) acc += buf[i] * buf[i]
+                val v = kotlin.math.sqrt(acc / got).toInt()
+                if (rms.isNotEmpty()) rms.append(',')
+                rms.append(v)
+            } else {
+                Thread.sleep(2)
+            }
+        }
+
         val dbg = (0..9).joinToString("/") { MorseCore.debugState(h, it).toString() }
         // The three captions the game loop writes (rate / clock / pile-up), read back the way the
         // form reads them. Before this call existed the rate panel showed a literal 0.
@@ -216,7 +233,7 @@ private fun audioProof(): String = runCatching {
         "cqPeak=$cqPeak cqSamples=$cqSamples calls=$calls cqBlocks=$cqBlocks stations=$stations " +
             "call=${call ?: "-"} exch=${e1 ?: "-"}/${e2 ?: "-"} saved=$saved log=${MorseCore.logCount()} " +
             "pts=${MorseCore.score(0)} vpts=${MorseCore.score(1)} vptsEnd=$vptsEnd waited=$waitedBlocks " +
-            "mult=${MorseCore.score(2)} " +
+            "mult=${MorseCore.score(2)} rms=$rms " +
             "status=$status rate=${MorseCore.rate()} block=$n dbg=$dbg"
     } finally {
         MorseCore.contestFree(h)
