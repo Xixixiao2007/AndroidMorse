@@ -22,13 +22,16 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,8 +43,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -52,7 +57,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bh4gzk.morserunner.MainFormController
 import com.bh4gzk.morserunner.MorseCore
+import java.util.Locale
 import kotlin.math.min
 
 /*
@@ -117,13 +124,24 @@ import kotlin.math.min
  * the band stacking and the stretched/alClient rows depart from it.  The
  * per-control audit trail is `.scratch/ui/dfm-inventory.md`.
  *
- * # Placeholder content
+ * # Wiring (what a run does)
  *
- * This milestone is layout only: no engine, no audio, no session.  The CW pane
- * and the rate histogram carry fixed sample content (marked below); the QSO log
- * is empty exactly as in the .dfm (it is `ListView2.Clear` until a run starts);
- * the score grid has the .dfm's own Pts/Mult/Score rows with empty values.
- * The contest combo is real: its items come from [MorseCore.contestName].
+ * The form is bound to the Pascal contest core through [MainFormController].  The
+ * Run button starts `MorseCore.runStart` and the audio thread (`ContestAudio`);
+ * that thread's `MorseCore.block` calls *are* the game loop, so the clock is
+ * simply "samples pulled / rate", and the QSO log and score are polled back from
+ * the core a few times a second.  F1..F8 send the `TStationMessage` ordinals, the
+ * Station `Call` field is the operator call, and the Exchange `Call` field is
+ * pushed with `MorseCore.setHisCall` on every change.  The activity copies
+ * `assets/data` into `filesDir` and calls `MorseCore.setDataDir` before the first
+ * run, because the core reads DXCC.LIST and the call histories by name from there.
+ *
+ * Still deliberately static: the CW pane (the operator copies by ear — Morse
+ * Runner has no decoded-text pane) and the rate histogram (its data lives in the
+ * desktop form's `Histo` object, which the ABI does not expose).  Once a run has
+ * started the log uses the original's run-time `alClient` geometry (513x238,
+ * Main.pas:2111) instead of the idle 54 px, because that is how the original
+ * showed it while running.
  */
 
 /**
@@ -172,10 +190,25 @@ private val Float.pt: TextUnit
 
 /**
  * The form.  Everything is on one vertical scroll: at SCALE the stacked bands
- * are ~810 dp tall against this phone's ~780 dp of usable height.
+ * are ~810 dp tall in the idle design and ~960 dp once a run has started (the
+ * log grows to its run-time `alClient` height), against this phone's ~780 dp of
+ * usable height.
  */
 @Composable
-fun MainFormScreen(modifier: Modifier = Modifier) {
+fun MainFormScreen(controller: MainFormController, modifier: Modifier = Modifier) {
+    // The entry fields the core has to hear from: the Station call is the run's
+    // operator call (Main.dfm Edit4) and the Exchange call is the DX call being
+    // worked (Edit1), which the core keeps in Me.HisCall.
+    var contestIndex by remember { mutableIntStateOf(0) }
+    var myCall by remember { mutableStateOf("VE3NEA") }
+    var hisCall by remember { mutableStateOf("") }
+
+    // Every edit of the Call field goes to the core; the handle key makes this run
+    // once more when a fresh run starts, so the new contest learns the text.
+    LaunchedEffect(hisCall, controller.handle) {
+        if (controller.handle != 0L) controller.setHisCall(hisCall)
+    }
+
     val density = LocalDensity.current
     // fontScale = 1 keeps `sp` == `dp`, so the .dfm's font pixel heights scale
     // by exactly SCALE and never by the user's system font preference.
@@ -205,7 +238,7 @@ fun MainFormScreen(modifier: Modifier = Modifier) {
                     )
                     Spacer(Modifier.height(4.dp))
 
-                    QsoLogListView()
+                    QsoLogListView(rows = controller.logRows, runLayout = controller.started)
 
                     // Main.dfm:545 ListView2 is alTop directly against the logo block;
                     // Main.dfm:371 Panel5 (0,361,729x10) is an empty spacer band.
@@ -221,32 +254,46 @@ fun MainFormScreen(modifier: Modifier = Modifier) {
 
                     // Panel9 row 1: Main.dfm:920 ContestGroup + Main.dfm:855 Panel10.
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        ContestGroup()
-                        RunControlsPanel()
+                        ContestGroup(
+                            selectedIndex = contestIndex,
+                            onSelect = { contestIndex = it },
+                        )
+                        RunControlsPanel(
+                            controller = controller,
+                            // A new run starts from blank entry fields (WipeBoxes, Main.pas:1817).
+                            onToggleRun = {
+                                if (controller.running) {
+                                    controller.stopRun()
+                                } else {
+                                    hisCall = ""
+                                    controller.startRun(contestIndex, myCall)
+                                }
+                            },
+                        )
                     }
 
                     Spacer(Modifier.height(6.dp))
 
                     // Panel9 row 2: Main.dfm:700 GroupBox1 + Main.dfm:622 GroupBox3.
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        StationGroup()
+                        StationGroup(myCall = myCall, onMyCallChange = { myCall = it })
                         BandConditionsGroup()
                     }
 
                     Spacer(Modifier.height(6.dp))
 
                     // Panel1, left third: Main.dfm:178-233 Edit1..3 and their labels.
-                    ExchangeRow()
+                    ExchangeRow(hisCall = hisCall, onHisCallChange = { hisCall = it })
 
                     Spacer(Modifier.height(4.dp))
 
                     // Panel1, F1-F8: Main.dfm:86-157 SpeedButton4..11.
-                    SendButtons()
+                    SendButtons(onSend = controller::send)
 
                     Spacer(Modifier.height(4.dp))
 
                     // Panel1, middle + clock: Main.dfm:270 Panel4, :285 Panel7, :234 Panel2.
-                    ModeAndClockRow()
+                    ModeAndClockRow(elapsedSeconds = controller.elapsedSeconds)
 
                     Spacer(Modifier.height(4.dp))
 
@@ -258,7 +305,7 @@ fun MainFormScreen(modifier: Modifier = Modifier) {
                             Spacer(Modifier.height(2.dp))
                             RitBar()
                         }
-                        ScoreGrid()
+                        ScoreGrid(controller)
                     }
                     Spacer(Modifier.height(8.dp))
                 }
@@ -269,10 +316,18 @@ fun MainFormScreen(modifier: Modifier = Modifier) {
 
 // ---------------------------------------------------------------------------
 // Main.dfm:545 ListView2 — the QSO log (UTC/Call/Recv/Sent/Pref/Chk/Wpm).
-// alClient in run mode; 54 px tall (header + 2 rows) in the idle design.
+// 54 px tall (header + 2 rows) in the idle design; alClient (513 x 238) once a
+// run starts, which is the geometry the original ran with (Main.pas:2111).
 // ---------------------------------------------------------------------------
+private const val LOG_IDLE_HEIGHT_PX = 54f
+private const val LOG_RUN_HEIGHT_PX = 238f
+private const val LOG_ROW_HEIGHT_PX = 16f
+
+/** Rows that fit under the header in [LOG_RUN_HEIGHT_PX]: (238 - 15) / 16 = 13. */
+private const val LOG_RUN_ROWS = 13
+
 @Composable
-private fun QsoLogListView() {
+private fun QsoLogListView(rows: List<List<String>>, runLayout: Boolean) {
     // Column widths exactly as declared (80/104/90/84/(rest)/40/40 of 513 px).
     val columns = listOf(
         "UTC" to 80f,
@@ -284,10 +339,11 @@ private fun QsoLogListView() {
         "Wpm" to 40f,
     )
     val total = columns.sumOf { it.second.toDouble() }.toFloat()
+    val heightPx = if (runLayout) LOG_RUN_HEIGHT_PX else LOG_IDLE_HEIGHT_PX
     Column(
         Modifier
             .fillMaxWidth()
-            .height(54f.px)
+            .height(heightPx.px)
             .background(FieldFace)
             .border(1.dp, GroupEdge),
     ) {
@@ -306,9 +362,31 @@ private fun QsoLogListView() {
                 }
             }
         }
-        // ListView2 has no items in the .dfm (Main.pas:2107 ListView2.Clear) — the
-        // idle log is an empty grid.  The body is left empty on purpose.
-        Box(Modifier.fillMaxWidth().weight(1f).background(FieldFace))
+        Column(Modifier.fillMaxWidth().weight(1f).background(FieldFace)) {
+            // Newest at the bottom, the way the original's ListView2 auto-scrolled
+            // to the last QSO: show the tail of the log that fits the height.
+            val visible = if (runLayout) LOG_RUN_ROWS else 0
+            rows.takeLast(visible).forEach { cells ->
+                Row(Modifier.fillMaxWidth().height(LOG_ROW_HEIGHT_PX.px)) {
+                    columns.forEachIndexed { index, (_, width) ->
+                        Box(
+                            Modifier
+                                .weight(width / total)
+                                .fillMaxHeight()
+                                .border(0.5.dp, GroupEdge),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            FormLabel(
+                                cells.getOrElse(index) { "" },
+                                sizePx = 12f,
+                                family = FontFamily.Monospace,
+                                modifier = Modifier.padding(start = 3f.px),
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -422,24 +500,25 @@ private fun CwPane() {
             .border(1.dp, FieldEdge)
             .padding(horizontal = 4f.px, vertical = 3f.px),
     ) {
-        // Placeholder: layout milestone only, no engine is running and no .lst
-        // is loaded (Main.pas:2263 would load one into this pane).
+        // Kept empty on purpose: Morse Runner makes the operator copy by ear.  The
+        // .lst stream the original loaded here (Main.pas:2263) is the received
+        // text, and this port does not decode — nothing may appear in this pane.
     }
 }
 
 // ---------------------------------------------------------------------------
 // Main.dfm:920 ContestGroup (6,6,195x74) — SimContestCombo, 'Exchange', ExchangeEdit.
 // The combo is the one control with live data: MorseCore.contestName(0..count-1).
+// The selection is hoisted to MainFormScreen because Run starts the selected contest.
 // ---------------------------------------------------------------------------
 @Composable
-private fun ContestGroup() {
+private fun ContestGroup(selectedIndex: Int, onSelect: (Int) -> Unit) {
     val contests = remember { contestNames() }
-    var selected by remember { mutableStateOf(0) }
     VclGroupBox("Contest", widthPx = 195f, heightPx = 74f) {
         VclCombo(
             items = contests,
-            selectedIndex = selected,
-            onSelect = { selected = it },
+            selectedIndex = selectedIndex,
+            onSelect = onSelect,
             widthPx = 169f,
             xPx = 23f,
             yPx = 18f,
@@ -448,6 +527,7 @@ private fun ContestGroup() {
             "Exchange",
             modifier = Modifier.offset(x = 12f.px, y = 47f.px),
         )
+        // Static: the dynamic exchange (Main.dfm ExchangeEdit) has no ABI setter yet.
         VclEdit(
             "3A ON",
             widthPx = 116f,
@@ -466,15 +546,21 @@ private fun contestNames(): List<String> = runCatching {
 // ---------------------------------------------------------------------------
 // Main.dfm:855 Panel10 (0,322,212x37) — ToolBar1 '   Run   ', 'for', SpinEdit2 (30), 'min.'.
 // Panel10 is alBottom in Panel9; here it sits beside ContestGroup, same band.
+// The caption is the original's too: ToolButton1.Caption := 'Run'/'Stop' (Main.pas:2031).
 // ---------------------------------------------------------------------------
 @Composable
-private fun RunControlsPanel() {
+private fun RunControlsPanel(controller: MainFormController, onToggleRun: () -> Unit) {
+    // TSpinEdit2 is an editable number as well as a spinner; keep the text while the
+    // user is typing and push every valid value to the controller (which clamps it).
+    var minutesText by remember { mutableStateOf(controller.runMinutes.toString()) }
+    LaunchedEffect(controller.runMinutes) { minutesText = controller.runMinutes.toString() }
     Box(Modifier.size(212f.px, 74f.px)) {
         VclSpeedButton(
-            "   Run   ",
+            if (controller.running) "   Stop   " else "   Run   ",
             Modifier
                 .offset(x = 6f.px, y = 6f.px)
                 .size(97f.px, 29f.px),
+            onClick = onToggleRun,
         )
         // Drop-down arrow of the tbsDropDown tool button.
         Canvas(
@@ -490,20 +576,40 @@ private fun RunControlsPanel() {
             )
         }
         FormLabel("for", modifier = Modifier.offset(x = 107f.px, y = 13f.px))
-        VclSpinEdit(value = "30", widthPx = 45f, xPx = 128f, yPx = 10f)
+        VclSpinEdit(
+            value = minutesText,
+            widthPx = 45f,
+            xPx = 128f,
+            yPx = 10f,
+            onValueChange = { typed ->
+                val digits = typed.filter { it.isDigit() }.take(3)
+                minutesText = digits
+                digits.toIntOrNull()?.let(controller::updateRunMinutes)
+            },
+            onStep = { delta -> controller.updateRunMinutes(controller.runMinutes + delta) },
+        )
         FormLabel("min.", modifier = Modifier.offset(x = 179f.px, y = 13f.px))
     }
 }
 
 // ---------------------------------------------------------------------------
 // Main.dfm:700 GroupBox1 ' Station ' (6,81,194x155).
+// The Call field is the operator call `mr_run_start` receives (Main.dfm Edit4).
 // ---------------------------------------------------------------------------
 @Composable
-private fun StationGroup() {
+private fun StationGroup(myCall: String, onMyCallChange: (String) -> Unit) {
     var qsk by remember { mutableStateOf(false) }
     VclGroupBox(" Station ", widthPx = 194f, heightPx = 155f) {
         FormLabel("Call", modifier = Modifier.offset(x = 12f.px, y = 21f.px))
-        VclEdit("VE3NEA", widthPx = 89f, heightPx = 23f, xPx = 45f, yPx = 15f, fontPx = 13f)
+        VclEdit(
+            text = myCall,
+            widthPx = 89f,
+            heightPx = 23f,
+            xPx = 45f,
+            yPx = 15f,
+            fontPx = 13f,
+            onValueChange = { onMyCallChange(it.uppercase()) },
+        )
         VclCheckBox(
             "QSK",
             xPx = 140f,
@@ -578,46 +684,80 @@ private fun BandConditionsGroup() {
 // Main.dfm:79-233 Panel1 left third — Label1/2/3 above Edit1/Edit2/Edit3.
 // The fields keep the .dfm's 118:77:45 proportions but stretch to the phone
 // width (see the file header: 'Nr.' is 36 dp wide at SCALE, too small to read).
+//
+// Edit1 ("Call") is the DX call the operator copies by ear; every change goes to
+// `MorseCore.setHisCall`.  RST/Nr. stay static: the ABI has no setter for them.
 // ---------------------------------------------------------------------------
 @Composable
-private fun ExchangeRow() {
+private fun ExchangeRow(hisCall: String, onHisCallChange: (String) -> Unit) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        FieldWithLabel("Call", "", weight = 118f)
+        FieldWithLabel(
+            "Call",
+            hisCall,
+            weight = 118f,
+            onValueChange = { onHisCallChange(it.uppercase()) },
+        )
         FieldWithLabel("RST", "", weight = 77f)
         FieldWithLabel("Nr.", "", weight = 45f)
     }
 }
 
 @Composable
-private fun RowScope.FieldWithLabel(label: String, value: String, weight: Float) {
+private fun RowScope.FieldWithLabel(
+    label: String,
+    value: String,
+    weight: Float,
+    onValueChange: ((String) -> Unit)? = null,
+) {
     Column(Modifier.weight(weight)) {
         FormLabel(label)
         Spacer(Modifier.height(2f.px))
-        VclEdit(value, widthPx = 0f, heightPx = 27f, xPx = 0f, yPx = 0f, fontPx = 16f, fillWidth = true)
+        VclEdit(
+            text = value,
+            widthPx = 0f,
+            heightPx = 27f,
+            xPx = 0f,
+            yPx = 0f,
+            fontPx = 16f,
+            fillWidth = true,
+            onValueChange = onValueChange,
+        )
     }
 }
 
 // ---------------------------------------------------------------------------
 // Main.dfm:86-157 SpeedButton4..11 — F1 CQ / F2 <exch> / F3 TU / F4 <my> over
 // F5 <his> / F6 B4 / F7 ? / F8 NIL (65 x 26 each, two rows of four).
+// The captions map 1:1 onto the TStationMessage ordinals Station.pas defines:
+// msgCQ=1, msgNR=2, msgTU=3, msgMyCall=4, msgHisCall=5, msgB4=6, msgQm=7, msgNil=8.
 // ---------------------------------------------------------------------------
 @Composable
-private fun SendButtons() {
-    val captions = listOf(
-        "F1  CQ", "F2  <exch>", "F3  TU", "F4  <my>",
-        "F5  <his>", "F6  B4", "F7  ?", "F8  NIL",
+private fun SendButtons(onSend: (Int) -> Unit) {
+    val buttons = listOf(
+        "F1  CQ" to 1,
+        "F2  <exch>" to 2,
+        "F3  TU" to 3,
+        "F4  <my>" to 4,
+        "F5  <his>" to 5,
+        "F6  B4" to 6,
+        "F7  ?" to 7,
+        "F8  NIL" to 8,
     )
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        captions.chunked(4).forEach { rowCaptions ->
+        buttons.chunked(4).forEach { rowButtons ->
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                rowCaptions.forEach { caption ->
-                    VclSpeedButton(caption, Modifier.weight(1f).height(26f.px))
+                rowButtons.forEach { (caption, message) ->
+                    VclSpeedButton(
+                        caption,
+                        Modifier.weight(1f).height(26f.px),
+                        onClick = { onSend(message) },
+                    )
                 }
             }
         }
@@ -630,7 +770,7 @@ private fun SendButtons() {
 // an empty bevel panel; :234 Panel2 (522,5,191x33) the clock.
 // ---------------------------------------------------------------------------
 @Composable
-private fun ModeAndClockRow() {
+private fun ModeAndClockRow(elapsedSeconds: Long) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -647,7 +787,8 @@ private fun ModeAndClockRow() {
             FormLabel("Pile-Up", sizePx = 11f, color = ModeGreen, weight = FontWeight.Bold)
         }
         // Main.dfm:285 Panel7 is empty at design time; at run time Log.pas:1114
-        // sets its Caption to 'n  qso/hr.', so the idle value 0 is shown.
+        // sets its Caption to 'n  qso/hr.'.  The rate lives in the desktop form's
+        // Histo object, which the ABI does not expose, so the idle 0 stays.
         Box(
             Modifier
                 .size(104f.px, 33f.px)
@@ -666,15 +807,25 @@ private fun ModeAndClockRow() {
             contentAlignment = Alignment.Center,
         ) {
             // Main.dfm:740 Panel2.Caption '00:00:00', Arial -24, colour #20F0D7.
-            FormLabel("00:00:00", sizePx = 24f, color = TimerFont)
+            // Contest.pas:832 keeps it at FormatDateTime('hh:nn:ss', BlocksToSeconds).
+            FormLabel(clockText(elapsedSeconds), sizePx = 24f, color = TimerFont)
         }
     }
 }
 
+/** `FormatDateTime('hh:nn:ss')` of the run clock; the hour wraps at 24 as it does there. */
+private fun clockText(seconds: Long): String {
+    val total = if (seconds > 0L) seconds else 0L
+    val hours = (total / 3600L) % 24L
+    val minutes = (total / 60L) % 60L
+    val secs = total % 60L
+    return String.format(Locale.ROOT, "%02d:%02d:%02d", hours, minutes, secs)
+}
+
 // ---------------------------------------------------------------------------
 // Main.dfm:251 Panel3 (292,45,225x67) with PaintBox1 (1,1,223x65) — the QSO
-// rate histogram, painted by Histo.Repaint (Main.pas:1806).  Bars are fixed
-// sample data: this milestone has no run to draw.
+// rate histogram, painted by Histo.Repaint (Main.pas:1806).  Still static: the
+// rate series lives in the desktop form's Histo object, not in the ABI.
 // ---------------------------------------------------------------------------
 @Composable
 private fun RateHistogramPanel() {
@@ -732,11 +883,24 @@ private fun RitBar() {
 // ---------------------------------------------------------------------------
 // Main.dfm:315 Panel11 (529,44,191x85) with ListView1 (189x83) — the score /
 // correction grid.  Columns: '' (48), 'Raw' (70), 'Verified' (70); rows
-// Pts/Mult/Score (from ListView1.Items.ItemData in the .dfm); values empty.
-// Panel11's own Caption '0' is covered by the alClient grid, as in the .dfm.
+// Pts/Mult/Score (from ListView1.Items.ItemData in the .dfm).
+// Log.UpdateStats fills them from RawPoints / VerifiedPoints and the two
+// multiplier lists, with Score = points * multipliers; those four numbers are
+// exactly MorseCore.score(0..3).  Before the first run the .dfm's empty cells stay.
 // ---------------------------------------------------------------------------
 @Composable
-private fun ScoreGrid() {
+private fun ScoreGrid(controller: MainFormController) {
+    val showValues = controller.started
+    val rawPoints = if (showValues) controller.rawPoints.toString() else ""
+    val verifiedPoints = if (showValues) controller.verifiedPoints.toString() else ""
+    val rawMultipliers = if (showValues) controller.rawMultipliers.toString() else ""
+    val verifiedMultipliers = if (showValues) controller.verifiedMultipliers.toString() else ""
+    val rawScore = if (showValues) (controller.rawPoints * controller.rawMultipliers).toString() else ""
+    val verifiedScore = if (showValues) {
+        (controller.verifiedPoints * controller.verifiedMultipliers).toString()
+    } else {
+        ""
+    }
     Column(
         Modifier
             .size(191f.px, 85f.px)
@@ -748,29 +912,46 @@ private fun ScoreGrid() {
             ScoreCell("Raw", 70f, header = true)
             ScoreCell("Verified", 70f, header = true)
         }
-        listOf("Pts", "Mult", "Score").forEach { row ->
-            Row(Modifier.fillMaxWidth().height(16f.px)) {
-                ScoreCell(row, 48f)
-                ScoreCell("", 70f)
-                ScoreCell("", 70f)
-            }
-        }
+        ScoreValueRow("Pts", rawPoints, verifiedPoints)
+        ScoreValueRow("Mult", rawMultipliers, verifiedMultipliers)
+        ScoreValueRow("Score", rawScore, verifiedScore)
     }
 }
 
 @Composable
-private fun ScoreCell(text: String, widthPx: Float, header: Boolean = false) {
+private fun ScoreValueRow(label: String, raw: String, verified: String) {
+    Row(Modifier.fillMaxWidth().height(16f.px)) {
+        ScoreCell(label, 48f)
+        ScoreCell(raw, 70f, rightAligned = true)
+        ScoreCell(verified, 70f, rightAligned = true)
+    }
+}
+
+@Composable
+private fun ScoreCell(
+    text: String,
+    widthPx: Float,
+    header: Boolean = false,
+    rightAligned: Boolean = false,
+) {
     Box(
         Modifier
             .width(widthPx.px)
             .fillMaxHeight()
             .border(0.5.dp, GroupEdge),
-        contentAlignment = if (header) Alignment.Center else Alignment.CenterStart,
+        contentAlignment = when {
+            header -> Alignment.Center
+            rightAligned -> Alignment.CenterEnd
+            else -> Alignment.CenterStart
+        },
     ) {
         FormLabel(
             text,
             sizePx = 12f,
-            modifier = Modifier.padding(start = if (header) 0.dp else 2f.px),
+            modifier = Modifier.padding(
+                start = if (header) 0.dp else 2f.px,
+                end = if (rightAligned) 2f.px else 0.dp,
+            ),
         )
     }
 }
@@ -848,6 +1029,11 @@ private fun VclGroupBox(
     }
 }
 
+/**
+ * A VCL `TEdit`: the sunken white field.  With [onValueChange] it is a real
+ * `BasicTextField` inside the same frame (the Call fields); without it, it is
+ * the read-only caption the .dfm's other edits showed.
+ */
 @Composable
 private fun VclEdit(
     text: String,
@@ -857,6 +1043,7 @@ private fun VclEdit(
     yPx: Float,
     fontPx: Float = 13f,
     fillWidth: Boolean = false,
+    onValueChange: ((String) -> Unit)? = null,
 ) {
     Box(
         Modifier
@@ -867,13 +1054,31 @@ private fun VclEdit(
             .border(1.dp, FieldEdge),
         contentAlignment = Alignment.CenterStart,
     ) {
-        FormLabel(
-            text,
-            sizePx = fontPx,
-            family = FontFamily.Monospace,
-            weight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 3f.px),
-        )
+        if (onValueChange == null) {
+            FormLabel(
+                text,
+                sizePx = fontPx,
+                family = FontFamily.Monospace,
+                weight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 3f.px),
+            )
+        } else {
+            BasicTextField(
+                value = text,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = TextStyle(
+                    color = FormInk,
+                    fontSize = fontPx.pt,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                ),
+                cursorBrush = SolidColor(FormInk),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 3f.px, end = 2f.px),
+            )
+        }
     }
 }
 
@@ -912,7 +1117,14 @@ private fun VclCheckBox(
 
 /** `TSpinEdit`: a sunken edit field with an up/down arrow pair on the right. */
 @Composable
-private fun VclSpinEdit(value: String, widthPx: Float, xPx: Float, yPx: Float) {
+private fun VclSpinEdit(
+    value: String,
+    widthPx: Float,
+    xPx: Float,
+    yPx: Float,
+    onValueChange: ((String) -> Unit)? = null,
+    onStep: ((Int) -> Unit)? = null,
+) {
     Box(
         Modifier
             .offset(x = xPx.px, y = yPx.px)
@@ -920,18 +1132,38 @@ private fun VclSpinEdit(value: String, widthPx: Float, xPx: Float, yPx: Float) {
             .background(FieldFace)
             .border(1.dp, FieldEdge),
     ) {
-        FormLabel(
-            value,
-            modifier = Modifier.align(Alignment.CenterStart).padding(start = 3f.px),
-        )
+        if (onValueChange == null) {
+            FormLabel(
+                value,
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 3f.px),
+            )
+        } else {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = TextStyle(
+                    color = FormInk,
+                    fontSize = 12f.pt,
+                    fontFamily = FontFamily.SansSerif,
+                ),
+                cursorBrush = SolidColor(FormInk),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxWidth()
+                    .padding(start = 3f.px, end = 12f.px),
+            )
+        }
         Column(
             Modifier
                 .align(Alignment.CenterEnd)
                 .width(11f.px)
                 .height(20f.px),
         ) {
-            Canvas(Modifier.fillMaxWidth().weight(1f)) { drawArrow(up = true) }
-            Canvas(Modifier.fillMaxWidth().weight(1f)) { drawArrow(up = false) }
+            val stepUp = if (onStep != null) Modifier.clickable { onStep(1) } else Modifier
+            val stepDown = if (onStep != null) Modifier.clickable { onStep(-1) } else Modifier
+            Canvas(Modifier.fillMaxWidth().weight(1f).then(stepUp)) { drawArrow(up = true) }
+            Canvas(Modifier.fillMaxWidth().weight(1f).then(stepDown)) { drawArrow(up = false) }
         }
     }
 }
@@ -1009,12 +1241,16 @@ private fun VclCombo(
 
 /** `TSpeedButton`: a raised flat-faced button (F1..F8, Run). */
 @Composable
-private fun VclSpeedButton(caption: String, modifier: Modifier = Modifier) {
+private fun VclSpeedButton(
+    caption: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {},
+) {
     Box(
         modifier
             .background(FormFace)
             .vclBevel(raised = true)
-            .clickable { },
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         FormLabel(caption, sizePx = 12f, modifier = Modifier.padding(horizontal = 2f.px))
