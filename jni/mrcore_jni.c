@@ -148,3 +148,32 @@ Java_com_bh4gzk_morserunner_MorseCore_score(JNIEnv *env, jclass cls, jint which)
     (void)env; (void)cls;
     return (jint)mr_score((int)which);
 }
+
+extern void mr_set_his_call(void *h, const char *text);
+extern void mr_set_data_dir(const char *path);
+
+JNIEXPORT void JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_setHisCall(JNIEnv *env, jclass cls, jlong h, jstring text)
+{
+    const char *c;
+    (void)cls;
+    if (text == NULL) return;
+    c = (*env)->GetStringUTFChars(env, text, NULL);
+    if (c != NULL) {
+        mr_set_his_call((void *)(intptr_t)h, c);
+        (*env)->ReleaseStringUTFChars(env, text, c);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_bh4gzk_morserunner_MorseCore_setDataDir(JNIEnv *env, jclass cls, jstring path)
+{
+    const char *c;
+    (void)cls;
+    if (path == NULL) return;
+    c = (*env)->GetStringUTFChars(env, path, NULL);
+    if (c != NULL) {
+        mr_set_data_dir(c);
+        (*env)->ReleaseStringUTFChars(env, path, c);
+    }
+}

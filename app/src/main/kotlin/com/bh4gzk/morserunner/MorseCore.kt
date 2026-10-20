@@ -64,4 +64,10 @@ object MorseCore {
 
     /** 0 raw points, 1 verified points, 2 raw multipliers, 3 verified multipliers. */
     external fun score(which: Int): Int
+
+    /** The DX call the operator copied into the Call field. */
+    external fun setHisCall(handle: Long, text: String)
+
+    /** Directory holding the bundled data files (DXCC.LIST and the call histories). */
+    external fun setDataDir(path: String)
 }

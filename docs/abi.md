@@ -65,3 +65,36 @@ private external fun mr_version(): String
 ```
 with `System.loadLibrary("mrcore")`. The Gradle build copies the FPC output into
 `app/src/main/jniLibs/arm64-v8a/libmrcore.so`; nothing else about the APK changes.
+
+## The run API (implemented; verified on device)
+
+The original desktop app advanced the simulation from its sound-card callback: every time the
+device wanted a block it called `TContest.GetAudio`, which filters, modulates, runs the AGC, ticks
+the operator and every station, and appends finished QSOs to the log. That call *is* the game loop,
+so the core exposes it directly and the phone's UI drives it.
+
+| function | meaning |
+|---|---|
+| `mr_run_start(idx, mycall) -> void*` | create the contest of kind `idx`, set the operator call, reset the log. `0` on failure. |
+| `mr_block(handle, float* out, cap) -> int` | one audio block (mono, `mr_contest_rate()` Hz); returns the sample count. The float scale is the AGC/mixer output (about 16-bit units, peak ~3000), so divide by 32768 before playback. **One thread only.** |
+| `mr_send(handle, msg)` | send a canned message by its `TStationMessage` ordinal (F1 CQ = 1, F2 exchange = 2, F3 TU = 3, F4 my call = 4, F5 his call = 5, F6 B4 = 6, F7 ? = 7, F8 NIL = 8). |
+| `mr_set_my_call` / `mr_set_his_call` | the operator's own call / the DX call just copied. |
+| `mr_set_data_dir(path)` | where `DXCC.LIST` and the call histories live (the APK ships them in `assets/data`, the UI copies them to `filesDir`). Without it the contest still runs; multipliers fall back to zero instead of crashing. |
+| `mr_contest_rate` / `mr_block_size` | 11025 Hz / 512 samples. |
+| `mr_log_count` / `mr_log_cell(row, col, buf, cap)` | the QSO log; columns 0 UTC, 1 Call, 2 Recv, 3 Sent, 4 Pref, 5 Chk, 6 Wpm. |
+| `mr_score(which)` | 0 raw points, 1 verified points, 2 raw multipliers, 3 verified multipliers. |
+
+Evidence (2026-10-20, ZTE 7534N): 200 blocks → `samples=99845 peak=3150.5 block=512 rate=11025`;
+`contestStart(0) -> TCqWpx`.
+
+### Globals the desktop form used to own
+
+Three pieces of engine state were created by `TMainForm` and are now created by the core itself,
+because a nil there is a hard SIGSEGV, not a soft failure:
+
+- `gDXCCList` (upstream `Main.pas:450`) — created in the headless form stub;
+- `Histo` (`Main.pas:452`) — created in the library's `initialization`;
+- `Tst` (the running contest pointer) — assigned by `mr_run_start`.
+
+`Log.Clear` is deliberately **not** used: it also clears `Tst.Stations` and repaints VCL widgets,
+so the core clears only the log arrays it owns.
