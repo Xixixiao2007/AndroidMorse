@@ -566,7 +566,7 @@ private fun LogoBlock() {
         // Not in the .dfm: the Android port credits its author. MPL-2.0 requires the source to
         // stay available and the notices to travel with the binary; this is the runtime notice.
         FormLabel(
-            "Android port ©2026 肖畅 (BH4GZK) - MPL-2.0",
+            "Android port ©2026 Charles Xiao (BH4GZK) - MPL-2.0",
             sizePx = 12f,
             family = FontFamily.Monospace,
             textAlign = TextAlign.Center,

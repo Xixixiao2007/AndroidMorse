@@ -8,7 +8,7 @@ This is a **rewrite**, not a build: the original cannot be compiled here (no Del
 FPC/Lazarus). Behaviour is transcribed from the Pascal with `file:line` citations in the code,
 and the upstream clone in `upstream/` is used read-only as the reference.
 
-- Author: **肖畅 (BH4GZK)** <https://github.com/Xixixiao2007>
+- Author: **Charles Xiao (BH4GZK)** <https://github.com/Xixixiao2007>
 - Reference: [w7sst/MorseRunner](https://github.com/w7sst/MorseRunner) @ `2dd6f5c` (1.85.4)
 - Licence: MPL-2.0 — see [LICENSE.md](LICENSE.md); provenance and third-party data (which is
   **not** MPL) in [NOTICE.md](NOTICE.md)
