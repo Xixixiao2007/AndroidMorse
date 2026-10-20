@@ -49,5 +49,10 @@ These are redistributed **unmodified** from upstream, and they carry their own t
 
 ## This repository
 
-Original Kotlin code: © the contributors of this repository, under MPL-2.0 unless a file says
-otherwise.
+Original Kotlin code and the Android port: © 2026 **肖畅 (BH4GZK)**, under MPL-2.0 unless a file
+says otherwise.
+
+The port is a derivative work of Morse Runner Community Edition (MPL-2.0), so the same licence
+applies to the files that carry upstream logic, and the source stays available at
+<https://github.com/Xixixiao2007/AndroidMorse> — including for any distributed APK, as MPL-2.0 §3.2
+requires.

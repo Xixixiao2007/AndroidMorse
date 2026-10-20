@@ -481,7 +481,7 @@ private fun LogoBlock() {
     Box(
         Modifier
             .fillMaxWidth()
-            .height(238f.px)
+            .height(258f.px)
             .background(ClientBackground)
             .border(1.dp, GroupEdge),
     ) {
@@ -562,6 +562,15 @@ private fun LogoBlock() {
             sizePx = 13f,
             family = FontFamily.Monospace,
             modifier = Modifier.align(Alignment.TopCenter).offset(y = 214f.px),
+        )
+        // Not in the .dfm: the Android port credits its author. MPL-2.0 requires the source to
+        // stay available and the notices to travel with the binary; this is the runtime notice.
+        FormLabel(
+            "Android port ©2026 肖畅 (BH4GZK) - MPL-2.0",
+            sizePx = 12f,
+            family = FontFamily.Monospace,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = 236f.px),
         )
     }
 }
