@@ -13,8 +13,11 @@ android {
         applicationId = "com.bh4gzk.morserunner"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.85.4"
+        // 1.85.4 is the Morse Runner release this port tracks; the fourth number is the ANDROID
+        // port's own revision, bumped on every published build. Deriving the name from versionCode
+        // keeps the two from drifting (the copyright page shows BuildConfig.VERSION_NAME).
+        versionCode = 3
+        versionName = "1.85.4.1"
     }
 
     buildTypes {
@@ -34,6 +37,9 @@ android {
 
     buildFeatures {
         compose = true
+        // BuildConfig.VERSION_NAME feeds the copyright page, so the build must generate it
+        // (AGP 8 leaves BuildConfig off unless it is asked for).
+        buildConfig = true
     }
 
     packaging {
