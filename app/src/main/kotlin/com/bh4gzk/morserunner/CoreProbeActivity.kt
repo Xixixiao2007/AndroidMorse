@@ -83,7 +83,12 @@ private fun sweepOneContest(idx: Int): String {
         val e2 = if (stations > 0) MorseCore.stationExch(h, 0, 1) else null
         var saved = -1
         if (call != null) {
-            MorseCore.setEntry(h, call, e1 ?: "", e2 ?: "")
+            // ARRL Sweepstakes parses the whole exchange out of the THIRD field
+            // (TSSExchParser.ValidateEnteredExchange reads AExch2): nr prec check section.
+            val single = idx == 11
+            val x1 = if (single) "" else (e1 ?: "")
+            val x2 = if (single) listOfNotNull(e1, e2).joinToString(" ").trim() else (e2 ?: "")
+            MorseCore.setEntry(h, call, x1, x2)
             MorseCore.send(h, 2)      // the exchange
             pull(40)
             saved = MorseCore.saveQso(h)
