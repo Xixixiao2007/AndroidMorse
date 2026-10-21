@@ -1,7 +1,24 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+// Release signing material lives OUTSIDE the repository: the keystore and its password file are
+// the only copy of the key that can ever sign an update for this application id. Reading it from a
+// path outside the tree (overridable with MR_SIGNING_PROPERTIES) keeps the secret out of git while
+// still letting a clean checkout build a signed release on this machine.
+val signingProperties: Properties? = run {
+    val path = System.getenv("MR_SIGNING_PROPERTIES")
+        ?: "${System.getProperty("user.home")}/.android-keys/morserunner-signing.properties"
+    val f = File(path)
+    if (!f.isFile) {
+        println("WARNING: no release signing properties at $path — app-release.apk will be unsigned")
+        null
+    } else Properties().apply { f.inputStream().use { load(it) } }
 }
 
 android {
@@ -16,13 +33,34 @@ android {
         // 1.85.4 is the Morse Runner release this port tracks; the fourth number is the ANDROID
         // port's own revision, bumped on every published build. Deriving the name from versionCode
         // keeps the two from drifting (the copyright page shows BuildConfig.VERSION_NAME).
-        versionCode = 4
-        versionName = "1.85.4.2"
+        versionCode = 5
+        versionName = "1.85.4.3"
+    }
+
+    signingConfigs {
+        if (signingProperties != null) {
+            create("release") {
+                storeFile = File(signingProperties.getProperty("storeFile"))
+                storePassword = signingProperties.getProperty("storePassword")
+                keyAlias = signingProperties.getProperty("keyAlias")
+                keyPassword = signingProperties.getProperty("keyPassword")
+                if (signingProperties.getProperty("storeType") != null) {
+                    storeType = signingProperties.getProperty("storeType")
+                }
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (signingProperties != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            // Same RTL text rendering as the debug build: the contest engine writes its strings in
+            // place, and shrinking is off, so the release binary differs only by its signing and by
+            // the absence of the debuggable flag.
+            isDebuggable = false
         }
     }
 
