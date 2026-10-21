@@ -811,16 +811,18 @@ private fun ExchangeRow(
     onExch2Change: (String) -> Unit,
     onEnter: () -> Unit,
 ) {
-    // Main.pas Advance: as soon as the callsign is in, the RST is filled with 599 and the cursor
-    // goes straight to the exchange field, skipping RST — a 599 report is what goes out in almost
-    // every QSO, so the operator only types the serial. Typing a space is the phone's Enter
-    // (Main.pas FormKeyPress #13): the field that receives it advances and the space is dropped.
+    // Main.pas Advance: as soon as the callsign is in, the RST is filled in and the cursor goes
+    // straight to the exchange field, skipping RST — a 599 report goes out in almost every QSO, so
+    // the operator only types the serial. It is filled as the CW short code `5NN`: that is what the
+    // operator reads and writes in a contest, while the engine stores the digits (Main.pas:601
+    // converts a typed N to 9, and the log's 5NN/599 translation is display-only here).
+    // Typing a space is the phone's Enter (Main.pas FormKeyPress #13).
     val callFocus = remember { FocusRequester() }
     val rstFocus = remember { FocusRequester() }
     val nrFocus = remember { FocusRequester() }
 
     fun advanceFromCall() {
-        if (exch1.isBlank()) onExch1Change("599")
+        if (exch1.isBlank()) onExch1Change("5NN")
         nrFocus.requestFocus()
     }
 
@@ -848,7 +850,8 @@ private fun ExchangeRow(
             focusRequester = rstFocus,
             onValueChange = { typed ->
                 val advance = typed.endsWith(' ')
-                onExch1Change(if (advance) typed.dropLast(1) else typed)
+                // Uppercase so a phone keyboard's `n` still reads as the short code's N.
+                onExch1Change((if (advance) typed.dropLast(1) else typed).uppercase().take(3))
                 if (advance) nrFocus.requestFocus()
             },
             imeAction = ImeAction.Next,

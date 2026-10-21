@@ -217,6 +217,8 @@ private fun audioProof(): String = runCatching {
         var saved = -1
         if (call != null) {
             MorseCore.setEntry(h, call, e1 ?: "", e2 ?: "")
+            MorseCore.send(h, 2)   // msgNR: the exchange, report included (F2 on the form)
+            pull(60)
             saved = MorseCore.saveQso(h)
             pull(80)   // let the answer and TU go out
         }
@@ -252,6 +254,8 @@ private fun audioProof(): String = runCatching {
             val e12 = MorseCore.stationExch(h, 0, 0)
             val e22 = MorseCore.stationExch(h, 0, 1)
             MorseCore.setEntry(h, heard2, e12 ?: "", e22 ?: "")
+            MorseCore.send(h, 2)
+            pull(60)
             saved2 = MorseCore.saveQso(h)
             pull(80)
         }
