@@ -16,8 +16,8 @@ android {
         // 1.85.4 is the Morse Runner release this port tracks; the fourth number is the ANDROID
         // port's own revision, bumped on every published build. Deriving the name from versionCode
         // keeps the two from drifting (the copyright page shows BuildConfig.VERSION_NAME).
-        versionCode = 3
-        versionName = "1.85.4.1"
+        versionCode = 4
+        versionName = "1.85.4.2"
     }
 
     buildTypes {
