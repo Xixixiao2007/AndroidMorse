@@ -24,3 +24,12 @@ captures/
 # CI runs verify-tests.py --strict.
 /tools/gradle-8.9/
 /tools/gradle-8.9-bin.zip
+
+# Pascal core: sources are tracked here (MPL-2.0 section 3.2 needs them shipped with the binary);
+# the compiler's object files are not.
+core-pascal/**/*.o
+core-pascal/**/*.ppu
+core-pascal/**/*.a
+core-pascal/**/*.so
+core-pascal/**/*.ppl
+core-pascal/**/*.log

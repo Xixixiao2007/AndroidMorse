@@ -1,84 +1,74 @@
 # Morse Runner for Android
 
 A native Android port of **Morse Runner Community Edition 1.85.4** — the CW contest simulator
-originally written in Delphi/VCL for Windows — rebuilt for a phone: one hand, portrait, 2×4
-canned-message buttons instead of a function-key strip.
+originally written in Delphi/VCL for Windows — rebuilt for a phone: one hand, portrait, a 2×4
+canned-message strip instead of a function-key row, and the same pile-up, exchange and scoring
+rules underneath.
 
-This is a **rewrite**, not a build: the original cannot be compiled here (no Delphi, no
-FPC/Lazarus). Behaviour is transcribed from the Pascal with `file:line` citations in the code,
-and the upstream clone in `upstream/` is used read-only as the reference.
+It is not a from-scratch reimplementation of the game. The **contest engine is the original
+Pascal**, kept in [`core-pascal/`](core-pascal/) and cross-compiled to an `arm64-v8a` shared
+library with Free Pascal; a small C ABI ([`jni/mrcore_jni.c`](jni/mrcore_jni.c)) joins it to a
+Kotlin + Jetpack Compose UI. The upstream clone in `upstream/` is used read-only as the
+behavioural reference, and each behavioural change carries a comment naming the upstream code it
+replaces.
 
 - Author: **Charles Xiao (BH4GZK)** <https://github.com/Xixixiao2007>
 - Reference: [w7sst/MorseRunner](https://github.com/w7sst/MorseRunner) @ `2dd6f5c` (1.85.4)
-- Licence: MPL-2.0 — see [LICENSE.md](LICENSE.md); provenance and third-party data (which is
-  **not** MPL) in [NOTICE.md](NOTICE.md)
-- Planning docs: [CONTEXT.md](CONTEXT.md) (facts, decisions, glossary), [docs/adr/](docs/adr/),
-  [docs/spec/mr-android-spec.md](docs/spec/mr-android-spec.md)
+- Licence: **MPL-2.0** — see [LICENSE.md](LICENSE.md). The corresponding source of every
+  MPL-covered file, including the Pascal engine that ends up in the APK, is in this repository
+  (MPL-2.0 §3.2). Third-party components and bundled data that are **not** MPL are listed in
+  [NOTICE.md](NOTICE.md).
+- Planning artefacts: [CONTEXT.md](CONTEXT.md), [docs/adr/](docs/adr/), [docs/spec/](docs/spec/)
 
-## Status
+## What it does today
 
-Milestone A is "playable CQ WW". Ticket order and current state live in
-`.scratch/progress.md` (kept current by every session) and spec §11.
+All twelve contests of MRCE 1.85.4 run end to end: CQ WPX, CWops CWT, ARRL Field Day, NCJ NAQP,
+HST, CQ WW, ARRL DX, K1USN SST, JARL ALL JA, JARL ACAG, IARU HF and ARRL Sweepstakes. Each was
+exercised on a phone (ZTE 7534N, Android 13) through one complete QSO and checked for a saved log
+row, points and *verified* points: every contest scores and verifies, including Sweepstakes'
+`<nr> <precedence> <check> <section>` exchange and HST's speed-based scoring.
 
-| Ticket | Scope | State |
-|---|---|---|
-| T1 | project skeleton, module split, WSA deploy script | done |
-| T2 | bounded expression language | done — 78 tests |
-| T3 | schema v1, three contest configs, loader with load-time validation | done — 61 tests |
-| T4 | CW audio: timing, envelope, single-signal playback | done — 20 tests, verified on WSA |
-| T5 | station roster, pile-up, lock-free block mixer | in progress |
-| T6 | QSO state machine, log, scoring | groundwork only (`QsoLog`) |
-| T7 | Compose UI: 2×4 grid, entry, autocomplete | not started |
+CW goes out with the short codes the contest expects (`5NN`, and `N`/`T`/`A` for the exchange
+digits), while every text field and the log stay in decimal — the abbreviation is applied to the
+transmitted audio only. Enter sends the DX call and TU before it logs the QSO, as the desktop does.
 
-## Modules
+## Layout
 
-| Module | What lives there | Android deps |
-|---|---|---|
-| `app` | Compose shell, `AudioTrack` sink, persistence | yes |
-| `core-expr` | the bounded expression language (lexer → parser → evaluator) | no |
-| `core-contest` | config schema, JSON reader, loader, the 12 contest ids | no |
-| `core-data` | `MASTER.DTA`, `DXCC.LIST`, callsign/prefix, ARRL sections | no |
-| `core-qso` | QSO state vocabulary, log, scoring aggregation | no |
-| `core-audio` | Morse timing, text → elements, CW synthesis | no |
+| Path | What lives there |
+|---|---|
+| [`core-pascal/`](core-pascal/) | the contest engine: MRCE's Pascal, adapted, plus `headless/` and `mrcore.lpr` (the C ABI). MPL-2.0 |
+| [`jni/`](jni/) | the C shim between Kotlin and the engine — plain functions, no C++ |
+| `app/` | Compose UI, `AudioTrack` sink, assets, the engine's Kotlin facade |
+| `core-audio/`, `core-contest/`, `core-data/`, `core-expr/`, `core-morse/`, `core-qso/` | Kotlin modules from the first milestone: Morse timing and synthesis, contest metadata, DXCC/callsign data, the bounded expression language, QSO vocabulary |
+| [`tools/`](tools/) | `build-native.sh` (cross-build), `verify-tests.py` (the evidence gate) |
 
-`core-*` are plain Kotlin/JVM, so they are covered by fast unit tests with no emulator.
+`core-*` are plain Kotlin/JVM, so their unit tests run without a device.
 
-## Build and test
+## Build
 
-The `JAVA_HOME` / `ANDROID_HOME` values below are what this machine actually has; they are not
-set system-wide.
+Prerequisites: JDK 17, Android SDK 35, the Android NDK, Free Pascal with an `aarch64` cross
+compiler, and Gradle 8.9.
 
 ```bash
-cd /c/DSHproj/AndroidMorse
-export JAVA_HOME='C:\Program Files (x86)\Android\openjdk\jdk-17.0.14'
-export ANDROID_HOME='C:\Program Files (x86)\Android\android-sdk'
+# native: engine + JNI shim -> app/src/main/jniLibs/arm64-v8a/
+FPC=/path/to/ppcrossa64 ANDROID_NDK_HOME=/path/to/ndk bash tools/build-native.sh
 
-# one module while iterating
-cmd.exe //c "C:\DSHproj\AndroidMorse\tools\gradle-8.9\bin\gradle.bat --no-daemon -Pkotlin.incremental=false :core-audio:test"
-
-# everything, at ticket closure
-cmd.exe //c "C:\DSHproj\AndroidMorse\tools\gradle-8.9\bin\gradle.bat --no-daemon -Pkotlin.incremental=false assembleDebug test"
-
-# then prove the numbers, including the skip count (a skipped test is not evidence)
-python tools/verify-tests.py --strict
+# Kotlin + APK
+gradle --no-daemon -Pkotlin.incremental=false :app:assembleRelease
 ```
 
-`-Pkotlin.incremental=false` is there because two Gradle builds in this tree corrupt the Kotlin
-incremental cache; see `AGENTS.md` for the other workarounds.
-
-## Run on Windows Subsystem for Android
+Release builds are signed from a keystore outside the repository: point `MR_SIGNING_PROPERTIES`
+at a properties file holding `storeFile`, `storePassword`, `keyAlias` and `keyPassword`. Without
+it the build still succeeds but produces an unsigned APK.
 
 ```bash
-# start WSA if it is suspended, then connect
-cmd.exe //c "start shell:AppsFolder\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe!App"
-"C:\Program Files (x86)\Android\android-sdk\platform-tools\adb.exe" connect 127.0.0.1:58526
-
-# build, install, launch
-bash tools/deploy-wsa.sh
+# the evidence gate: every suite, skip count included (a skipped test is not evidence)
+python tools/verify-tests.py --strict
 ```
 
 ## Data assets
 
-`MASTER.DTA`, `DXCC.LIST` and the per-contest call-history files are redistributed unmodified
-from upstream. They carry their own terms — the DXCC list is ARRL material reproduced "with
-permission", not MPL-2.0. Read [NOTICE.md](NOTICE.md) before publishing anything.
+`MASTER.DTA`, `dxcc.list` and the per-contest call-history files are redistributed unmodified
+from upstream in `app/src/main/assets/`. They carry their own terms — the DXCC list is ARRL
+material reproduced "with permission", not MPL-2.0. Read [NOTICE.md](NOTICE.md) before
+redistributing anything.
