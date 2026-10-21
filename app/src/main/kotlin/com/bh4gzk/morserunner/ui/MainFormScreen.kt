@@ -1,5 +1,7 @@
 package com.bh4gzk.morserunner.ui
 
+import com.bh4gzk.morserunner.BuildConfig
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -491,7 +493,7 @@ private fun LogoBlock() {
         // block is narrower than the .dfm's 513 px; the vertical offsets are
         // the .dfm's (label y minus Shape1 y = 54).
         FormLabel(
-            "Morse Runner 1.85.4",
+            "Morse Runner ${BuildConfig.VERSION_NAME}",
             sizePx = 35f,
             color = TitleShadow,
             weight = FontWeight.Bold,
@@ -501,7 +503,7 @@ private fun LogoBlock() {
                 .offset(x = 6f.px, y = 7f.px),
         )
         FormLabel(
-            "Morse Runner 1.85.4",
+            "Morse Runner ${BuildConfig.VERSION_NAME}",
             sizePx = 35f,
             color = TitleAqua,
             weight = FontWeight.Bold,
@@ -511,7 +513,7 @@ private fun LogoBlock() {
                 .offset(x = 1f.px, y = 3f.px),
         )
         FormLabel(
-            "Morse Runner 1.85.4",
+            "Morse Runner ${BuildConfig.VERSION_NAME}",
             sizePx = 35f,
             color = TitleGreen,
             weight = FontWeight.Bold,
@@ -811,18 +813,17 @@ private fun ExchangeRow(
     onExch2Change: (String) -> Unit,
     onEnter: () -> Unit,
 ) {
-    // Main.pas Advance: as soon as the callsign is in, the RST is filled in and the cursor goes
-    // straight to the exchange field, skipping RST — a 599 report goes out in almost every QSO, so
-    // the operator only types the serial. It is filled as the CW short code `5NN`: that is what the
-    // operator reads and writes in a contest, while the engine stores the digits (Main.pas:601
-    // converts a typed N to 9, and the log's 5NN/599 translation is display-only here).
+    // Main.pas Advance: as soon as the callsign is in, the RST is filled with 599 and the cursor
+    // goes straight to the exchange field, skipping RST — a 599 report goes out in almost every
+    // QSO, so the operator only types the serial. Every TEXT surface stays decimal: the short code
+    // (5NN, cut digits) is what the keyer sends, never what the screen shows.
     // Typing a space is the phone's Enter (Main.pas FormKeyPress #13).
     val callFocus = remember { FocusRequester() }
     val rstFocus = remember { FocusRequester() }
     val nrFocus = remember { FocusRequester() }
 
     fun advanceFromCall() {
-        if (exch1.isBlank()) onExch1Change("5NN")
+        if (exch1.isBlank()) onExch1Change("599")
         nrFocus.requestFocus()
     }
 

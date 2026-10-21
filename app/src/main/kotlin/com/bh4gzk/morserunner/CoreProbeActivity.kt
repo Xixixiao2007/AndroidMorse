@@ -1,6 +1,7 @@
 package com.bh4gzk.morserunner
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -38,12 +39,96 @@ import kotlinx.coroutines.withContext
  * This is the smallest thing that can honestly claim "a UI action calls the Pascal core and gets a
  * correct value back". The full Main.dfm layout replaces this screen; the binding stays.
  */
+
+/**
+ * The contest regression sweep: every contest the core offers, driven through one QSO, so a contest
+ * whose exchange types, call pool or scoring were broken by the short-code work shows up as a line
+ * of evidence instead of being found by the operator hours later.
+ */
+private fun sweepOneContest(idx: Int): String {
+    val name = MorseCore.contestName(idx) ?: "?"
+    val h = MorseCore.runStart(idx, "VE3NEA")
+    if (h == 0L) return "idx=$idx name=[$name] START_FAILED"
+    try {
+        val buf = FloatArray(MorseCore.blockSize())
+        // A contest whose audio thread dies would otherwise hold the sweep in its wait loop: every
+        // one gets a hard 25 s budget, and a contest that hits it reports timedOut=true.
+        val deadline = System.nanoTime() + 25_000_000_000L
+        fun expired() = System.nanoTime() > deadline
+        var timedOut = false
+        fun pull(n: Int) {
+            var i = 0
+            while (i < n && !expired()) {
+                MorseCore.block(h, buf)
+                i++
+            }
+            if (expired()) timedOut = true
+        }
+        fun sending() = MorseCore.debugState(h, 3) == 3
+        fun waitDone(limit: Int = 300) {
+            var k = 0
+            while (sending() && k < limit && !expired()) { pull(10); k += 10 }
+        }
+        pull(2)
+        MorseCore.send(h, 1)          // CQ
+        pull(120)
+        waitDone()
+        var calls = 1
+        while (MorseCore.stationCount(h) == 0 && calls < 8 && !expired()) {
+            MorseCore.send(h, 1); calls++; pull(40); waitDone(); pull(20)
+        }
+        val stations = MorseCore.stationCount(h)
+        val call = if (stations > 0) MorseCore.stationCall(h, 0) else null
+        val e1 = if (stations > 0) MorseCore.stationExch(h, 0, 0) else null
+        val e2 = if (stations > 0) MorseCore.stationExch(h, 0, 1) else null
+        var saved = -1
+        if (call != null) {
+            MorseCore.setEntry(h, call, e1 ?: "", e2 ?: "")
+            MorseCore.send(h, 2)      // the exchange
+            pull(40)
+            saved = MorseCore.saveQso(h)
+            pull(60)
+        }
+        var waited = 0
+        while (waited < 400 && MorseCore.score(1) == 0 && !expired()) {
+            if (MorseCore.block(h, buf) > 0) waited++ else Thread.sleep(2)
+        }
+        return "idx=$idx name=[$name] stations=$stations call=${call ?: "-"} " +
+            "exch=${e1 ?: "-"}/${e2 ?: "-"} saved=$saved rows=${MorseCore.logCount()} " +
+            "pts=${MorseCore.score(0)} vpts=${MorseCore.score(1)} " +
+            "rate=[${MorseCore.statusText(0) ?: "-"}] clock=[${MorseCore.statusText(1) ?: "-"}] " +
+            "pile=[${MorseCore.statusText(2) ?: "-"}] timedOut=$timedOut err=[${MorseCore.lastError() ?: ""}]"
+    } finally {
+        MorseCore.contestFree(h)
+    }
+}
+
+private const val SWEEP_TAG = "MorseCoreSweep"
+
 class CoreProbeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A run without the call history has no callsigns to put on the air: DXCC.LIST and the
         // contest histories are the same files the form installs.
         BundledData.install(this)
+        // `adb shell am start -n <pkg>/.CoreProbeActivity --ez sweep true` runs every contest once
+        // and logs a line per contest under the MorseCoreSweep tag.
+        if (intent?.getBooleanExtra("sweep", false) == true) {
+            Thread {
+                val count = runCatching { MorseCore.contestCount() }.getOrDefault(0)
+                val from = intent?.getIntExtra("from", 0) ?: 0
+                val to = intent?.getIntExtra("to", count - 1) ?: (count - 1)
+                Log.i(SWEEP_TAG, "sweep start contests=$count range=$from..$to")
+                for (i in from..to) {
+                    val line = runCatching { sweepOneContest(i) }
+                        .getOrElse { "idx=$i name=[?] CRASH: ${it.message}" }
+                    Log.i(SWEEP_TAG, line)
+                }
+                Log.i(SWEEP_TAG, "sweep done")
+                finish()
+            }.start()
+            return
+        }
         setContent { MaterialTheme { CoreProbeScreen() } }
     }
 }

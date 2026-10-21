@@ -309,15 +309,9 @@ class MainFormController(private val audio: ContestAudio = ContestAudio()) {
         val rows = runCatching { MorseCore.logCount() }.getOrDefault(0)
         if (rows != loggedRows) {
             loggedRows = rows
-            // The engine stores the report as digits (599); a contest operator reads it as the CW
-            // short code 5NN, so the two exchange columns are translated for display only.
-            val report = Regex("\b([1-9])99\b")
-            fun displayed(column: Int, cell: String): String =
-                if (column == 2 || column == 3) report.replace(cell) { m -> m.groupValues[1] + "NN" }
-                else cell
             logRows = (0 until rows).map { row ->
                 (0 until LOG_COLUMNS).map { column ->
-                    displayed(column, runCatching { MorseCore.logCell(row, column) }.getOrNull().orEmpty())
+                    runCatching { MorseCore.logCell(row, column) }.getOrNull().orEmpty()
                 }
             }
         }
